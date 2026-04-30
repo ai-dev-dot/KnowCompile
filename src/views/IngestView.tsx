@@ -14,6 +14,8 @@ interface RawFile {
 export default function IngestView({ kbPath }: Props) {
   const [rawFiles, setRawFiles] = useState<RawFile[]>([])
   const [status, setStatus] = useState<string | null>(null)
+  const [compiling, setCompiling] = useState<string | null>(null)
+  const [compileResult, setCompileResult] = useState<string | null>(null)
   const ipc = useIPC()
 
   useEffect(() => {
@@ -40,6 +42,26 @@ export default function IngestView({ kbPath }: Props) {
     await loadRawFiles()
   }
 
+  const handleCompile = async (filePath: string) => {
+    setCompiling(filePath)
+    setCompileResult(null)
+    try {
+      const result = await ipc.compile(kbPath, filePath)
+      // Extract the first "# Title" from the result as the page name
+      const titleMatch = result.match(/^# (.+)$/m)
+      if (titleMatch) {
+        const title = titleMatch[1].trim()
+        await ipc.writeWikiPage(`${kbPath}/wiki/${title}.md`, result)
+      }
+      setCompileResult(`编译完成，页面已生成`)
+    } catch (err) {
+      setCompileResult(`编译失败：${err}`)
+    } finally {
+      setCompiling(null)
+      loadRawFiles()
+    }
+  }
+
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* Raw file list sidebar */}
@@ -54,12 +76,17 @@ export default function IngestView({ kbPath }: Props) {
             rawFiles.map((file) => (
               <div key={file.path} className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-gray-800 group">
                 <span className="text-sm text-text-muted truncate flex-1">{file.name}</span>
-                <button
-                  onClick={() => handleDelete(file.path)}
-                  className="text-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 text-xs ml-2"
-                >
-                  删除
-                </button>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                  <button
+                    onClick={() => handleCompile(file.path)}
+                    disabled={compiling === file.path}
+                    className="text-text-muted hover:text-accent text-xs disabled:opacity-50"
+                    title="编译为 Wiki 页面"
+                  >
+                    {compiling === file.path ? '编译中...' : '编译'}
+                  </button>
+                  <button onClick={() => handleDelete(file.path)} className="text-text-muted hover:text-red-400 text-xs ml-1">删除</button>
+                </div>
               </div>
             ))
           )}
@@ -75,6 +102,11 @@ export default function IngestView({ kbPath }: Props) {
             {status}
           </div>
         )}
+        {compileResult && (
+          <div className="mt-4 p-3 rounded-lg bg-accent/10 text-accent text-sm">
+            {compileResult}
+          </div>
+        )}
         <div className="mt-8">
           <h3 className="text-sm font-semibold text-text-muted mb-3">已导入的资料</h3>
           <div className="space-y-1">
@@ -86,9 +118,18 @@ export default function IngestView({ kbPath }: Props) {
                     {(file.size / 1024).toFixed(1)} KB
                   </span>
                 </div>
-                <span className="text-xs text-text-muted">
-                  {new Date(file.addedAt).toLocaleDateString('zh-CN')}
-                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleCompile(file.path)}
+                    disabled={compiling === file.path}
+                    className="text-xs text-accent hover:underline disabled:opacity-50"
+                  >
+                    {compiling === file.path ? '编译中...' : '编译'}
+                  </button>
+                  <span className="text-xs text-text-muted">
+                    {new Date(file.addedAt).toLocaleDateString('zh-CN')}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
