@@ -162,20 +162,41 @@ export function registerIPCHandlers() {
     const targetScore = 80
     const results: { iteration: number; score: number; output: string }[] = []
 
+    let lastOutput = ''
+
     for (let i = 0; i < maxIterations; i++) {
-      const compileResult = await compileNewPages(rawContent, rawName, existingTitles, kbPath)
+      let compileResult: string
+      if (i === 0) {
+        compileResult = await compileNewPages(rawContent, rawName, existingTitles, kbPath)
+      } else {
+        // Fix iteration: feed validation issues back to LLM
+        const issues = validateMultiPage(lastOutput)
+        const errorList = issues.reports
+          .flatMap(r => r.issues)
+          .map(iss => `[${iss.severity}] ${iss.rule}: ${iss.message}`)
+          .join('\n')
+
+        const systemPath = require('path').join(kbPath, 'schema', 'system.md')
+        const rulesPath = require('path').join(kbPath, 'schema', 'compile-rules.md')
+        const stylePath = require('path').join(kbPath, 'schema', 'style-guide.md')
+        const fs = require('fs')
+        const schema = [
+          fs.existsSync(systemPath) ? fs.readFileSync(systemPath, 'utf-8') : '',
+          fs.existsSync(rulesPath) ? fs.readFileSync(rulesPath, 'utf-8') : '',
+          fs.existsSync(stylePath) ? fs.readFileSync(stylePath, 'utf-8') : '',
+        ].join('\n\n')
+
+        compileResult = await chat([
+          { role: 'system', content: schema },
+          { role: 'user', content: `你上一轮编译的输出有以下质量问题，请逐一修复后重新输出完整的 Wiki 页面：\n\n${errorList}\n\n上一轮输出：\n${lastOutput}` },
+        ])
+      }
+
+      lastOutput = compileResult
       const validation = validateMultiPage(compileResult)
       results.push({ iteration: i + 1, score: validation.overallScore, output: compileResult })
 
       if (validation.overallScore >= targetScore) break
-
-      // Feed issues back into compile prompt for next iteration
-      if (i < maxIterations - 1) {
-        const allIssues = validation.reports
-          .flatMap(r => r.issues.filter(iss => iss.severity === 'error'))
-          .map(iss => `- ${iss.message}`)
-        if (allIssues.length === 0) break
-      }
     }
 
     return {
