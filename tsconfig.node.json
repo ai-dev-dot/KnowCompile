@@ -10,7 +10,8 @@
     "rootDir": "electron",
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": false
+    "declaration": false,
+    "ignoreDeprecations": "6.0"
   },
   "include": ["electron"]
 }
