@@ -1,0 +1,42 @@
+{
+  "name": "ai-notes",
+  "version": "0.1.0",
+  "description": "AI 笔记 - 基于 LLM Wiki 的个人知识管理工具",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "license": "MIT",
+  "author": "ai-dev-dot",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.91.1",
+    "archiver": "^7.0.1",
+    "chokidar": "^5.0.0",
+    "cytoscape": "^3.33.3",
+    "flexsearch": "^0.8.212",
+    "marked": "^18.0.2",
+    "openai": "^6.35.0",
+    "pdf-parse": "^2.4.5",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10",
+    "wait-on": "^9.0.5"
+  }
+}
