@@ -47,11 +47,14 @@ export default function IngestView({ kbPath }: Props) {
     setCompileResult(null)
     try {
       const result = await ipc.compile(kbPath, filePath)
-      // Extract the first "# Title" from the result as the page name
       const titleMatch = result.match(/^# (.+)$/m)
       if (titleMatch) {
         const title = titleMatch[1].trim()
         await ipc.writeWikiPage(`${kbPath}/wiki/${title}.md`, result)
+      } else {
+        // Fallback: use the raw file name (without extension) as the page name
+        const fallbackName = filePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '')
+        await ipc.writeWikiPage(`${kbPath}/wiki/${fallbackName}.md`, result)
       }
       setCompileResult(`编译完成，页面已生成`)
     } catch (err) {

@@ -5,7 +5,7 @@ interface Props { kbPath: string }
 
 export default function SettingsView({ kbPath }: Props) {
   const [settings, setSettings] = useState({
-    llm: { provider: 'openai' as const, apiKey: '', baseURL: '', model: 'gpt-4o' },
+    llm: { provider: 'openai', apiKey: '', baseURL: '', model: 'gpt-4o' },
   })
   const [schemaFiles, setSchemaFiles] = useState<{ name: string; content: string }[]>([])
   const [editingSchema, setEditingSchema] = useState<string | null>(null)
@@ -31,9 +31,11 @@ export default function SettingsView({ kbPath }: Props) {
     setSchemaFiles(prev => prev.map(f => f.name === name ? { ...f, content: editContent } : f))
   }
 
-  const handleExport = async (type: string) => {
+  const handleExport = async (type: 'html' | 'markdown' | 'backup') => {
     setExportStatus(`导出中...`)
-    const result = await ipc.invoke(`export:${type}`, kbPath) as { success: boolean; path?: string; error?: string }
+    const result = type === 'html' ? await ipc.exportHTML(kbPath)
+      : type === 'markdown' ? await ipc.exportMarkdown(kbPath)
+      : await ipc.backup(kbPath)
     if (result.success) {
       setExportStatus(`导出成功：${result.path}`)
     } else {

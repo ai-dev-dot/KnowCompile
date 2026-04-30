@@ -104,8 +104,17 @@ export function registerIPCHandlers() {
   ipcMain.handle('llm:compile', async (_event, kbPath: string, rawFilePath: string) => {
     const fs = require('fs')
     const path = require('path')
-    const rawContent = fs.readFileSync(rawFilePath, 'utf-8')
+    const ext = path.extname(rawFilePath).toLowerCase()
     const rawName = path.basename(rawFilePath)
+
+    let rawContent: string
+    if (ext === '.pdf') {
+      const pdfBuffer = fs.readFileSync(rawFilePath)
+      const pdfData = await require('pdf-parse')(pdfBuffer)
+      rawContent = pdfData.text
+    } else {
+      rawContent = fs.readFileSync(rawFilePath, 'utf-8')
+    }
 
     const wikiDir = path.join(kbPath, 'wiki')
     const existingTitles: string[] = fs.existsSync(wikiDir)

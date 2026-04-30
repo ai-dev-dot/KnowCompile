@@ -4,11 +4,6 @@ import { useIPC } from '../hooks/useIPC'
 
 interface Props { kbPath: string }
 
-interface GraphData {
-  nodes: { id: string; label: string; linkCount: number }[]
-  edges: { source: string; target: string }[]
-}
-
 export default function GraphView({ kbPath }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
@@ -16,7 +11,7 @@ export default function GraphView({ kbPath }: Props) {
 
   useEffect(() => {
     (async () => {
-      const data = await ipc.invoke('graph:data', kbPath) as GraphData
+      const data = await ipc.getGraphData(kbPath)
 
       if (!containerRef.current) return
       if (cyRef.current) cyRef.current.destroy()

@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "Bash(git fetch *)",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(git branch *)",
+      "Bash(bash *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(npm install *)",
+      "Bash(tasklist)",
+      "Bash(wmic process *)",
+      "Bash(tasklist /v /fo csv /fi \"imagename eq node.exe\")",
+      "Bash(taskkill /PID 20264 /F)",
+      "Bash(taskkill /PID 20352 /F)",
+      "Bash(cmd.exe *)",
+      "Bash(npm config *)",
+      "Bash(npm --version)",
+      "Bash(ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm install -D electron)",
+      "Bash(git commit *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(npx vite *)",
+      "Bash(git --no-pager log --oneline -1)",
+      "Bash(npm i *)",
+      "Bash(timeout 10 npx electron .)"
+    ]
+  }
+}

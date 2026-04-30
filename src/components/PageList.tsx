@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 interface PageItem {
   name: string
   path: string
@@ -9,11 +11,13 @@ interface Props {
   pages: PageItem[]
   activePage?: string
   onSelect: (page: PageItem) => void
+  children?: ReactNode
 }
 
-export default function PageList({ title, pages, activePage, onSelect }: Props) {
+export default function PageList({ title, pages, activePage, onSelect, children }: Props) {
   return (
     <aside className="w-[220px] bg-panel flex flex-col flex-shrink-0 border-r border-border">
+      {children}
       <div className="px-4 py-3 text-sm font-semibold text-text border-b border-border">
         {title}
       </div>

@@ -58,6 +58,18 @@ export function useIPC() {
     search: (query: string) =>
       api.invoke('search:query', query) as Promise<{ name: string }[]>,
 
+    // Graph
+    getGraphData: (kbPath: string) =>
+      api.invoke('graph:data', kbPath) as Promise<{ nodes: { id: string; label: string; linkCount: number }[]; edges: { source: string; target: string }[] }>,
+
+    // Export
+    exportHTML: (kbPath: string) =>
+      api.invoke('export:html', kbPath) as Promise<{ success: boolean; path?: string; error?: string }>,
+    exportMarkdown: (kbPath: string) =>
+      api.invoke('export:markdown', kbPath) as Promise<{ success: boolean; path?: string; error?: string }>,
+    backup: (kbPath: string) =>
+      api.invoke('export:backup', kbPath) as Promise<{ success: boolean; path?: string; error?: string }>,
+
     // Generic invoke for handlers not yet typed
     invoke: (channel: string, ...args: unknown[]) =>
       api.invoke(channel, ...args),

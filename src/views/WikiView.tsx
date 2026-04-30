@@ -56,16 +56,6 @@ export default function WikiView({ kbPath }: Props) {
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      {/* Search bar */}
-      <div className="px-3 py-2">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => handleSearch(e.target.value)}
-          placeholder="搜索页面..."
-          className="w-full bg-gray-800 text-text rounded-md px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-accent"
-        />
-      </div>
       <PageList
         title={searchResults ? `搜索结果 (${searchResults.length})` : 'Wiki 页面'}
         pages={searchResults
@@ -74,7 +64,17 @@ export default function WikiView({ kbPath }: Props) {
         }
         activePage={activePage ?? undefined}
         onSelect={loadPage}
-      />
+      >
+        <div className="px-3 py-2">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
+            placeholder="搜索页面..."
+            className="w-full bg-gray-800 text-text rounded-md px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-accent"
+          />
+        </div>
+      </PageList>
       <main className="flex-1 overflow-y-auto p-8">
         {activePage ? (
           <MarkdownRenderer content={content} onLinkClick={navigateTo} />
