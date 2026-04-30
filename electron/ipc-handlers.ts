@@ -138,6 +138,39 @@ export function registerIPCHandlers() {
     ])
   })
 
+  // Graph data
+  ipcMain.handle('graph:data', (_event, kbPath: string) => {
+    const fs = require('fs')
+    const path = require('path')
+    const wikiDir = path.join(kbPath, 'wiki')
+    if (!fs.existsSync(wikiDir)) return { nodes: [], edges: [] }
+
+    const nodes: { id: string; label: string; linkCount: number }[] = []
+    const edges: { source: string; target: string }[] = []
+    const linkCount: Record<string, number> = {}
+
+    const files = fs.readdirSync(wikiDir).filter((f: string) => f.endsWith('.md'))
+    for (const file of files) {
+      const name = file.replace('.md', '')
+      const content = fs.readFileSync(path.join(wikiDir, file), 'utf-8')
+      const pattern = /\[\[([^\]]+)\]\]/g
+      let match
+      while ((match = pattern.exec(content)) !== null) {
+        const target = match[1]
+        edges.push({ source: name, target })
+        linkCount[name] = (linkCount[name] || 0) + 1
+        linkCount[target] = (linkCount[target] || 0) + 1
+      }
+    }
+
+    for (const file of files) {
+      const name = file.replace('.md', '')
+      nodes.push({ id: name, label: name, linkCount: linkCount[name] || 0 })
+    }
+
+    return { nodes, edges }
+  })
+
   // Search
   ipcMain.handle('search:build', (_event, kbPath: string) => {
     const fs = require('fs')
