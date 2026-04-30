@@ -111,7 +111,7 @@ export async function compileNewPages(
     },
     {
       role: 'user',
-      content: `## 已有 Wiki 页面\n${existingWikiTitles.join('\n') || '（无）'}\n\n## 新资料：${rawFileName}\n\n${rawContent.slice(0, 8000)}\n\n请根据编译规则，将以上资料编译为一个或多个 Wiki 页面。使用 Markdown 格式输出，使用 [[页面名]] 创建内部链接。每个页面的标题以 "# " 开头，来源引用使用 "> 来源：" 格式。`,
+      content: `## 已有 Wiki 页面\n${existingWikiTitles.join('\n') || '（无）'}\n\n## 新资料：${rawFileName}\n\n${rawContent.slice(0, 8000)}\n\n请根据编译规则，将以上资料编译为一个或多个 Wiki 页面。注意：只在"相关主题"章节集中放置 [[链接]]，正文中尽量少放链接，同一链接最多出现一次。每个页面的标题以 "# " 开头，来源引用使用 "> 来源：" 格式，放在章节末尾，不要使用脚注。`,
     },
   ]
 
