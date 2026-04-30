@@ -5,7 +5,10 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npm run build:main && vite build",
+    "build:main": "tsc -p tsconfig.node.json",
+    "dev:main": "npm run build:main && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "dev:all": "concurrently \"vite\" \"wait-on http://localhost:5173 && npm run dev:main\"",
     "preview": "vite preview"
   },
   "license": "MIT",
