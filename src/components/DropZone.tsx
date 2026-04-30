@@ -29,7 +29,7 @@ export default function DropZone({ onFilesDrop }: Props) {
       <p className="text-4xl mb-4">📥</p>
       <p className="text-text text-lg mb-2">拖放文件到此处</p>
       <p className="text-text-muted text-sm">
-        支持 PDF、Markdown、纯文本、网页链接等格式
+        支持 PDF、Markdown、纯文本等格式
       </p>
     </div>
   )
