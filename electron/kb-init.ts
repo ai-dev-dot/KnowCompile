@@ -202,6 +202,47 @@ const DEFAULT_SCHEMA: Record<string, string> = {
   'links-rules.md': DEFAULT_LINKS_RULES,
 }
 
+export const SCHEMA_VERSION = 1
+
+function writeVersion(basePath: string): void {
+  const versionPath = path.join(basePath, '.ai-notes', 'schema-version')
+  fs.writeFileSync(versionPath, String(SCHEMA_VERSION), 'utf-8')
+}
+
+function readVersion(basePath: string): number {
+  const versionPath = path.join(basePath, '.ai-notes', 'schema-version')
+  if (!fs.existsSync(versionPath)) return 0
+  try {
+    return parseInt(fs.readFileSync(versionPath, 'utf-8').trim(), 10) || 0
+  } catch {
+    return 0
+  }
+}
+
+export function checkSchemaUpdate(basePath: string): { updateAvailable: boolean; currentVersion: number; latestVersion: number } {
+  const current = readVersion(basePath)
+  return {
+    updateAvailable: current < SCHEMA_VERSION,
+    currentVersion: current,
+    latestVersion: SCHEMA_VERSION,
+  }
+}
+
+export function updateSchema(basePath: string): { success: boolean; updated: string[]; error?: string } {
+  try {
+    const updated: string[] = []
+    for (const [filename, content] of Object.entries(DEFAULT_SCHEMA)) {
+      const filePath = path.join(basePath, 'schema', filename)
+      fs.writeFileSync(filePath, content, 'utf-8')
+      updated.push(filename)
+    }
+    writeVersion(basePath)
+    return { success: true, updated }
+  } catch (error) {
+    return { success: false, updated: [], error: String(error) }
+  }
+}
+
 export function initKnowledgeBase(basePath: string): { success: boolean; error?: string } {
   try {
     const dirs = ['raw', 'wiki', 'schema', '.ai-notes']
@@ -218,6 +259,8 @@ export function initKnowledgeBase(basePath: string): { success: boolean; error?:
         fs.writeFileSync(filePath, content, 'utf-8')
       }
     }
+
+    writeVersion(basePath)
 
     return { success: true }
   } catch (error) {

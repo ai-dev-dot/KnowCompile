@@ -13,18 +13,21 @@ function stripThinking(text: string): string {
   return text.replace(/  [\s\S]*? /g, '').trim()
 }
 
-export async function chat(messages: ChatMessage[]): Promise<string> {
-  const settings = getSettings()
+export async function chat(
+  messages: ChatMessage[],
+  overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
+): Promise<string> {
+  const settings = overrideSettings || getSettings().llm
 
-  if (settings.llm.provider === 'anthropic') {
-    const client = new Anthropic({ apiKey: settings.llm.apiKey })
+  if (settings.provider === 'anthropic') {
+    const client = new Anthropic({ apiKey: settings.apiKey })
     const systemMsg = messages
       .filter(m => m.role === 'system')
       .map(m => m.content)
       .join('\n')
     const otherMsgs = messages.filter(m => m.role !== 'system')
     const resp = await client.messages.create({
-      model: settings.llm.model,
+      model: settings.model,
       max_tokens: 4096,
       system: systemMsg || undefined,
       messages: otherMsgs.map(m => ({
@@ -42,11 +45,11 @@ export async function chat(messages: ChatMessage[]): Promise<string> {
 
   // OpenAI / custom (MiniMax, DeepSeek, Qwen, etc.)
   const client = new OpenAI({
-    apiKey: settings.llm.apiKey,
-    baseURL: settings.llm.baseURL || undefined,
+    apiKey: settings.apiKey,
+    baseURL: settings.baseURL || undefined,
   })
   const resp = await client.chat.completions.create({
-    model: settings.llm.model,
+    model: settings.model,
     messages,
     temperature: 0.3,
   })

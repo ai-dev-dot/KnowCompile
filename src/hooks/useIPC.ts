@@ -39,6 +39,10 @@ export function useIPC() {
       api.invoke('schema:list', kbPath) as Promise<{ name: string; content: string }[]>,
     writeSchema: (filePath: string, content: string) =>
       api.invoke('schema:write', filePath, content) as Promise<{ success: boolean }>,
+    checkSchemaUpdate: (kbPath: string) =>
+      api.invoke('schema:check-update', kbPath) as Promise<{ updateAvailable: boolean; currentVersion: number; latestVersion: number }>,
+    updateSchema: (kbPath: string) =>
+      api.invoke('schema:update', kbPath) as Promise<{ success: boolean; updated: string[]; error?: string }>,
 
     // Settings
     getSettings: () =>

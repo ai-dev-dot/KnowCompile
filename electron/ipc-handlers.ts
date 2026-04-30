@@ -1,5 +1,5 @@
 import { ipcMain, dialog } from 'electron'
-import { initKnowledgeBase, getKBPath, setKBPath } from './kb-init'
+import { initKnowledgeBase, getKBPath, setKBPath, checkSchemaUpdate, updateSchema } from './kb-init'
 import {
   listWikiPages,
   listRawFiles,
@@ -90,6 +90,15 @@ export function registerIPCHandlers() {
   ipcMain.handle('schema:write', (_event, filePath: string, content: string) => {
     writeFile(filePath, content)
     return { success: true }
+  })
+
+  // Schema version management
+  ipcMain.handle('schema:check-update', (_event, kbPath: string) => {
+    return checkSchemaUpdate(kbPath)
+  })
+
+  ipcMain.handle('schema:update', (_event, kbPath: string) => {
+    return updateSchema(kbPath)
   })
 
   // Settings

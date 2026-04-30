@@ -7,35 +7,26 @@ export default function SettingsView({ kbPath }: Props) {
   const [settings, setSettings] = useState({
     llm: { provider: 'openai', apiKey: '', baseURL: '', model: '' },
   })
-  const [schemaFiles, setSchemaFiles] = useState<{ name: string; content: string }[]>([])
-  const [editingSchema, setEditingSchema] = useState<string | null>(null)
-  const [editContent, setEditContent] = useState('')
   const [saved, setSaved] = useState(false)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
   const [samplesLoaded, setSamplesLoaded] = useState(false)
   const [sampleStatus, setSampleStatus] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
-  const [qualityTestResult, setQualityTestResult] = useState<{ finalScore: number; iterations: number; history: { iteration: number; score: number }[] } | null>(null)
-  const [qualityTesting, setQualityTesting] = useState(false)
+  const [schemaUpdate, setSchemaUpdate] = useState<{ updateAvailable: boolean; currentVersion: number; latestVersion: number } | null>(null)
+  const [schemaUpdateStatus, setSchemaUpdateStatus] = useState<string | null>(null)
   const ipc = useIPC()
 
   useEffect(() => {
     ipc.getSettings().then(setSettings)
-    ipc.listSchema(kbPath).then(setSchemaFiles)
     ipc.checkSamples(kbPath).then(r => setSamplesLoaded(r.loaded))
+    ipc.checkSchemaUpdate(kbPath).then(setSchemaUpdate)
   }, [kbPath])
 
   const handleSaveSettings = async () => {
     await ipc.saveSettings(settings)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
-  }
-
-  const handleSaveSchema = async (name: string) => {
-    await ipc.writeSchema(`${kbPath}/schema/${name}`, editContent)
-    setEditingSchema(null)
-    setSchemaFiles(prev => prev.map(f => f.name === name ? { ...f, content: editContent } : f))
   }
 
   const handleExport = async (type: 'html' | 'markdown' | 'backup') => {
@@ -140,112 +131,38 @@ export default function SettingsView({ kbPath }: Props) {
         </div>
       </section>
 
-      {/* Compile Quality Test */}
-      <section className="mb-8">
-        <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">编译质量测试</h3>
-        <p className="text-text-muted text-xs mb-3">
-          编译 raw/ 中的第一个文件，自动验证输出格式（YAML frontmatter、链接规范、来源引用等）并输出质量评分。低于 80 分会自动迭代优化，最多 3 轮。
-        </p>
-        <button
-          onClick={async () => {
-            setQualityTesting(true)
-            setQualityTestResult(null)
-            try {
-              const files = await ipc.listRawFiles(kbPath)
-              if (files.length === 0) {
-                setQualityTestResult({ finalScore: 0, iterations: 0, history: [] })
-                return
-              }
-              const r = await ipc.iterateCompile(kbPath, files[0].path)
-              setQualityTestResult({ finalScore: r.finalScore, iterations: r.iterations, history: r.history })
-              // Save the best output to wiki
-              const sections = r.compileOutput.split(/(?=^# )/m).filter((s: string) => s.trim())
-              for (const section of sections) {
-                const titleMatch = section.match(/^# (.+)$/m)
-                if (titleMatch) {
-                  const pageName = titleMatch[1].trim()
-                  if (pageName === 'Wiki 索引' || pageName.toLowerCase() === 'wiki index') {
-                    await ipc.writeWikiPage(`${kbPath}/wiki/index.md`, section)
-                  } else {
-                    await ipc.writeWikiPage(`${kbPath}/wiki/${pageName}.md`, section)
-                  }
+      {/* Schema Update */}
+      {schemaUpdate?.updateAvailable && (
+        <section className="mb-8">
+          <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Schema 更新</h3>
+          <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+            <p className="text-sm text-yellow-400 mb-2">
+              内置编译规则已更新（v{schemaUpdate.currentVersion} → v{schemaUpdate.latestVersion}）。
+            </p>
+            <p className="text-xs text-text-muted mb-3">
+              更新将覆盖 schema/ 目录下的 system.md、compile-rules.md、style-guide.md、links-rules.md。
+              如果你曾修改过这些文件，更新会丢失你的自定义内容。
+            </p>
+            <button
+              onClick={async () => {
+                const r = await ipc.updateSchema(kbPath)
+                if (r.success) {
+                  setSchemaUpdate({ updateAvailable: false, currentVersion: schemaUpdate.latestVersion, latestVersion: schemaUpdate.latestVersion })
+                  setSchemaUpdateStatus(`已更新 ${r.updated.length} 个文件`)
+                } else {
+                  setSchemaUpdateStatus(`更新失败：${r.error}`)
                 }
-              }
-            } catch (err) {
-              setQualityTestResult({ finalScore: -1, iterations: 0, history: [] })
-            } finally {
-              setQualityTesting(false)
-            }
-          }}
-          disabled={qualityTesting}
-          className="px-4 py-2 bg-accent text-gray-950 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
-        >
-          {qualityTesting ? '测试中...' : '运行编译质量测试'}
-        </button>
-        {qualityTestResult && (
-          <div className={`mt-3 p-4 rounded-lg ${qualityTestResult.finalScore <= 0 ? 'bg-red-500/10 text-red-400' : qualityTestResult.finalScore >= 80 ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
-            {qualityTestResult.finalScore <= 0 ? (
-              <div>
-                <p className="font-semibold text-sm">测试失败</p>
-                <p className="text-xs mt-1">请确保 raw/ 中有文件且 LLM 配置正确</p>
-              </div>
-            ) : (
-              <div>
-                <p className="font-semibold text-sm">
-                  最终评分：{qualityTestResult.finalScore}/100
-                  {qualityTestResult.finalScore >= 80 ? ' ✅ 通过' : ' ⚠ 需优化'}
-                </p>
-                <p className="text-xs mt-1">迭代 {qualityTestResult.iterations} 轮</p>
-                {qualityTestResult.history.length > 1 && (
-                  <div className="flex gap-2 mt-2">
-                    {qualityTestResult.history.map((h, i) => (
-                      <span key={i} className="text-xs px-2 py-0.5 rounded bg-gray-700">
-                        第{h.iteration}轮: {h.score}分
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
+              }}
+              className="px-4 py-2 bg-yellow-500 text-gray-950 rounded-lg text-sm font-medium hover:opacity-90"
+            >
+              更新 Schema 规则
+            </button>
+            {schemaUpdateStatus && (
+              <p className="text-sm text-green-400 mt-2">{schemaUpdateStatus}</p>
             )}
           </div>
-        )}
-      </section>
-
-      {/* Schema Editor */}
-      <section className="mb-8">
-        <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Schema 规则编辑</h3>
-        <div className="space-y-2">
-          {schemaFiles.map((file) => (
-            <div key={file.name}>
-              <button
-                onClick={() => {
-                  setEditingSchema(editingSchema === file.name ? null : file.name)
-                  setEditContent(file.content)
-                }}
-                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                  editingSchema === file.name ? 'bg-gray-700 text-white' : 'text-text-muted hover:bg-gray-800 hover:text-white'
-                }`}
-              >
-                {file.name}
-              </button>
-              {editingSchema === file.name && (
-                <div className="mt-2 p-3 bg-gray-800 rounded-lg">
-                  <textarea
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
-                    rows={10}
-                    className="w-full bg-gray-900 text-text rounded-lg px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-accent resize-y"
-                  />
-                  <div className="flex gap-2 mt-2">
-                    <button onClick={() => handleSaveSchema(file.name)} className="px-3 py-1.5 bg-accent text-gray-950 rounded text-sm font-medium hover:opacity-90">保存</button>
-                    <button onClick={() => setEditingSchema(null)} className="px-3 py-1.5 bg-gray-700 text-text rounded text-sm hover:bg-gray-600">取消</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Sample Data */}
       <section className="mb-8">
