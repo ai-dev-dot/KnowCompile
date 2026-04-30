@@ -49,11 +49,11 @@ export default function App() {
     <div className="h-screen flex bg-surface overflow-hidden">
       <IconSidebar active={activeView} onChange={setActiveView} />
       <div className="flex-1 flex overflow-hidden">
-        {activeView === 'wiki' && <WikiView kbPath={kbPath} />}
-        {activeView === 'ingest' && <IngestView kbPath={kbPath} />}
-        {activeView === 'qa' && <QAView kbPath={kbPath} />}
-        {activeView === 'graph' && <GraphView kbPath={kbPath} />}
-        {activeView === 'settings' && <SettingsView kbPath={kbPath} />}
+        <div className={activeView === 'wiki' ? 'flex flex-1 overflow-hidden' : 'hidden'}><WikiView kbPath={kbPath} /></div>
+        <div className={activeView === 'ingest' ? 'flex flex-1 overflow-hidden' : 'hidden'}><IngestView kbPath={kbPath} /></div>
+        <div className={activeView === 'qa' ? 'flex flex-1 overflow-hidden' : 'hidden'}><QAView kbPath={kbPath} /></div>
+        <div className={activeView === 'graph' ? 'flex flex-1 overflow-hidden' : 'hidden'}><GraphView kbPath={kbPath} /></div>
+        <div className={activeView === 'settings' ? 'flex flex-1 overflow-hidden' : 'hidden'}><SettingsView kbPath={kbPath} /></div>
       </div>
     </div>
   )

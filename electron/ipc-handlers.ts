@@ -106,6 +106,36 @@ export function registerIPCHandlers() {
     return testConnection(settings)
   })
 
+  // Compile log tracking
+  ipcMain.handle('compile:check', (_event, kbPath: string, rawFileName: string) => {
+    const fs = require('fs')
+    const path = require('path')
+    const logPath = path.join(kbPath, '.ai-notes', 'compile-log.json')
+    if (!fs.existsSync(logPath)) return { compiled: false }
+    try {
+      const log = JSON.parse(fs.readFileSync(logPath, 'utf-8'))
+      const entry = log[rawFileName]
+      return entry ? { compiled: true, wikiPages: entry.pages, compiledAt: entry.at } : { compiled: false }
+    } catch {
+      return { compiled: false }
+    }
+  })
+
+  ipcMain.handle('compile:log', (_event, kbPath: string, rawFileName: string, wikiPages: string[]) => {
+    const fs = require('fs')
+    const path = require('path')
+    const logPath = path.join(kbPath, '.ai-notes', 'compile-log.json')
+    let log: Record<string, { pages: string[]; at: string }> = {}
+    if (fs.existsSync(logPath)) {
+      try { log = JSON.parse(fs.readFileSync(logPath, 'utf-8')) } catch { log = {} }
+    }
+    log[rawFileName] = { pages: wikiPages, at: new Date().toISOString() }
+    const dir = path.dirname(logPath)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(logPath, JSON.stringify(log, null, 2), 'utf-8')
+    return { success: true }
+  })
+
   // LLM compile
   ipcMain.handle('llm:compile', async (_event, kbPath: string, rawFilePath: string) => {
     const fs = require('fs')

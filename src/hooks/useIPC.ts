@@ -53,6 +53,10 @@ export function useIPC() {
       api.invoke('llm:compile', kbPath, rawFilePath) as Promise<string>,
     qa: (kbPath: string, question: string, contextPages: string[]) =>
       api.invoke('llm:qa', kbPath, question, contextPages) as Promise<string>,
+    checkCompileStatus: (kbPath: string, rawFileName: string) =>
+      api.invoke('compile:check', kbPath, rawFileName) as Promise<{ compiled: boolean; wikiPages?: string[]; compiledAt?: string }>,
+    logCompile: (kbPath: string, rawFileName: string, wikiPages: string[]) =>
+      api.invoke('compile:log', kbPath, rawFileName, wikiPages) as Promise<{ success: boolean }>,
 
     // Search
     buildSearchIndex: (kbPath: string) =>

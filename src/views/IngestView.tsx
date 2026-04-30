@@ -11,20 +11,34 @@ interface RawFile {
   addedAt: string
 }
 
+interface CompileStatus {
+  compiled: boolean
+  wikiPages?: string[]
+  compiledAt?: string
+}
+
 export default function IngestView({ kbPath }: Props) {
   const [rawFiles, setRawFiles] = useState<RawFile[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [compiling, setCompiling] = useState<string | null>(null)
   const [compileResult, setCompileResult] = useState<string | null>(null)
+  const [compileStatuses, setCompileStatuses] = useState<Record<string, CompileStatus>>({})
+  const [recompileFile, setRecompileFile] = useState<string | null>(null)
   const ipc = useIPC()
 
   useEffect(() => {
-    loadRawFiles()
+    loadAll()
   }, [kbPath])
 
-  const loadRawFiles = async () => {
+  const loadAll = async () => {
     const files = await ipc.listRawFiles(kbPath)
     setRawFiles(files)
+    // Check compile status for all files
+    const statuses: Record<string, CompileStatus> = {}
+    for (const f of files) {
+      statuses[f.name] = await ipc.checkCompileStatus(kbPath, f.name)
+    }
+    setCompileStatuses(statuses)
   }
 
   const handleDrop = async (paths: string[]) => {
@@ -32,43 +46,122 @@ export default function IngestView({ kbPath }: Props) {
     for (const p of paths) {
       await ipc.copyToRaw(kbPath, p)
     }
-    await loadRawFiles()
+    await loadAll()
     setStatus(`成功导入 ${paths.length} 个文件`)
     setTimeout(() => setStatus(null), 3000)
   }
 
   const handleDelete = async (filePath: string) => {
     await ipc.deleteWikiPage(filePath)
-    await loadRawFiles()
+    await loadAll()
   }
 
   const handleCompile = async (filePath: string) => {
     setCompiling(filePath)
     setCompileResult(null)
+    setRecompileFile(null)
+    const rawName = filePath.replace(/^.*[\\/]/, '')
+
     try {
       const result = await ipc.compile(kbPath, filePath)
-      const rawName = filePath.replace(/^.*[\\/]/, '')
-      const titleMatch = result.match(/^# (.+)$/m)
-      let pageName = ''
-      if (titleMatch) {
-        pageName = titleMatch[1].trim()
-      } else {
-        pageName = rawName.replace(/\.[^.]+$/, '')
-      }
-      await ipc.writeWikiPage(`${kbPath}/wiki/${pageName}.md`, result)
+      const wikiPages: string[] = []
 
-      // Track sample-generated pages for clean deletion later
+      // LLM may generate multiple pages (split by "# " headers)
+      const sections = result.split(/(?=^# )/m).filter(s => s.trim())
+      for (const section of sections) {
+        const titleMatch = section.match(/^# (.+)$/m)
+        if (titleMatch) {
+          const pageName = titleMatch[1].trim()
+          wikiPages.push(pageName)
+          await ipc.writeWikiPage(`${kbPath}/wiki/${pageName}.md`, section)
+        }
+      }
+
+      // Fallback: if no sections found, save as single page using raw file name
+      if (wikiPages.length === 0) {
+        const pageName = rawName.replace(/\.[^.]+$/, '')
+        wikiPages.push(pageName)
+        await ipc.writeWikiPage(`${kbPath}/wiki/${pageName}.md`, result)
+      }
+
+      // Track in compile log
+      await ipc.logCompile(kbPath, rawName, wikiPages)
+
+      // Track sample-generated pages
       if (rawName.startsWith('sample-')) {
-        await ipc.trackSamplePage(kbPath, pageName)
+        for (const p of wikiPages) {
+          await ipc.trackSamplePage(kbPath, p)
+        }
       }
 
-      setCompileResult(`编译完成，页面已生成`)
+      // Update local status
+      setCompileStatuses(prev => ({
+        ...prev,
+        [rawName]: { compiled: true, wikiPages, compiledAt: new Date().toISOString() },
+      }))
+
+      setCompileResult(`编译完成，已生成 ${wikiPages.length} 个 Wiki 页面：${wikiPages.join('、')}`)
     } catch (err) {
       setCompileResult(`编译失败：${err}`)
     } finally {
       setCompiling(null)
-      loadRawFiles()
     }
+  }
+
+  const getCompileButton = (file: RawFile) => {
+    const cs = compileStatuses[file.name]
+    const isCompiling = compiling === file.path
+    const isConfirmingRecompile = recompileFile === file.path
+
+    if (isCompiling) {
+      return (
+        <button disabled className="text-xs text-text-muted opacity-50">
+          编译中...
+        </button>
+      )
+    }
+
+    if (isConfirmingRecompile) {
+      return (
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-yellow-400">确认重新编译？</span>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleCompile(file.path) }}
+            className="text-xs text-green-400 hover:underline"
+          >
+            是
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setRecompileFile(null) }}
+            className="text-xs text-text-muted hover:text-white"
+          >
+            否
+          </button>
+        </div>
+      )
+    }
+
+    if (cs?.compiled) {
+      return (
+        <button
+          onClick={() => setRecompileFile(file.path)}
+          className="text-xs text-green-400/70 hover:text-yellow-400 group"
+          title={`编译于 ${cs.compiledAt ? new Date(cs.compiledAt).toLocaleString('zh-CN') : '未知时间'}，生成页面：${cs.wikiPages?.join('、')}`}
+        >
+          <span className="group-hover:hidden">已编译 ✓</span>
+          <span className="hidden group-hover:inline">重新编译</span>
+        </button>
+      )
+    }
+
+    return (
+      <button
+        onClick={() => handleCompile(file.path)}
+        className="text-xs text-accent hover:underline"
+      >
+        编译
+      </button>
+    )
   }
 
   return (
@@ -85,15 +178,8 @@ export default function IngestView({ kbPath }: Props) {
             rawFiles.map((file) => (
               <div key={file.path} className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-gray-800 group">
                 <span className="text-sm text-text-muted truncate flex-1">{file.name}</span>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                  <button
-                    onClick={() => handleCompile(file.path)}
-                    disabled={compiling === file.path}
-                    className="text-text-muted hover:text-accent text-xs disabled:opacity-50"
-                    title="编译为 Wiki 页面"
-                  >
-                    {compiling === file.path ? '编译中...' : '编译'}
-                  </button>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 items-center">
+                  {getCompileButton(file)}
                   <button onClick={() => handleDelete(file.path)} className="text-text-muted hover:text-red-400 text-xs ml-1">删除</button>
                 </div>
               </div>
@@ -107,14 +193,10 @@ export default function IngestView({ kbPath }: Props) {
         <h2 className="text-xl font-semibold text-text mb-6">资料摄入</h2>
         <DropZone onFilesDrop={handleDrop} />
         {status && (
-          <div className="mt-4 p-3 rounded-lg bg-accent/10 text-accent text-sm">
-            {status}
-          </div>
+          <div className="mt-4 p-3 rounded-lg bg-accent/10 text-accent text-sm">{status}</div>
         )}
         {compileResult && (
-          <div className="mt-4 p-3 rounded-lg bg-accent/10 text-accent text-sm">
-            {compileResult}
-          </div>
+          <div className="mt-4 p-3 rounded-lg bg-accent/10 text-accent text-sm">{compileResult}</div>
         )}
         <div className="mt-8">
           <h3 className="text-sm font-semibold text-text-muted mb-3">已导入的资料</h3>
@@ -126,15 +208,12 @@ export default function IngestView({ kbPath }: Props) {
                   <span className="text-xs text-text-muted ml-3">
                     {(file.size / 1024).toFixed(1)} KB
                   </span>
+                  {compileStatuses[file.name]?.compiled && (
+                    <span className="text-xs text-green-400/60 ml-2">已编译</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => handleCompile(file.path)}
-                    disabled={compiling === file.path}
-                    className="text-xs text-accent hover:underline disabled:opacity-50"
-                  >
-                    {compiling === file.path ? '编译中...' : '编译'}
-                  </button>
+                  {getCompileButton(file)}
                   <span className="text-xs text-text-muted">
                     {new Date(file.addedAt).toLocaleDateString('zh-CN')}
                   </span>
