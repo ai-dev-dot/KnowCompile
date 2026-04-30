@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import path from 'path'
+import { registerIPCHandlers } from './ipc-handlers'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -24,6 +25,8 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 }
+
+registerIPCHandlers()
 
 app.whenReady().then(createWindow)
 
