@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import IconSidebar from './components/IconSidebar'
+import Onboarding from './components/Onboarding'
 import WikiView from './views/WikiView'
 import IngestView from './views/IngestView'
 import QAView from './views/QAView'
@@ -13,17 +14,14 @@ export default function App() {
   const [activeView, setActiveView] = useState<View>('wiki')
   const [kbPath, setKbPath] = useState<string | null>(null)
   const [initializing, setInitializing] = useState(true)
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const ipc = useIPC()
 
   useEffect(() => {
     (async () => {
-      let path = await ipc.getKBPath()
+      const path = await ipc.getKBPath()
       if (!path) {
-        path = await ipc.selectKBPath()
-        if (path) {
-          await ipc.initKB(path)
-          await ipc.setKBPath(path)
-        }
+        setShowOnboarding(true)
       }
       setKbPath(path)
       setInitializing(false)
@@ -38,27 +36,12 @@ export default function App() {
     )
   }
 
-  if (!kbPath) {
+  if (showOnboarding) {
     return (
-      <div className="h-screen flex items-center justify-center bg-surface">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">AI 笔记</h1>
-          <p className="text-text-muted mb-6">请选择一个目录作为知识库</p>
-          <button
-            onClick={async () => {
-              const path = await ipc.selectKBPath()
-              if (path) {
-                await ipc.initKB(path)
-                await ipc.setKBPath(path)
-                setKbPath(path)
-              }
-            }}
-            className="px-6 py-2 bg-accent text-gray-950 rounded-lg font-medium hover:opacity-90"
-          >
-            选择目录
-          </button>
-        </div>
-      </div>
+      <Onboarding onComplete={(path) => {
+        setKbPath(path)
+        setShowOnboarding(false)
+      }} />
     )
   }
 
