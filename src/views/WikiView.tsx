@@ -6,9 +6,10 @@ import { useIPC } from '../hooks/useIPC'
 
 interface Props {
   kbPath: string
+  active?: boolean
 }
 
-export default function WikiView({ kbPath }: Props) {
+export default function WikiView({ kbPath, active }: Props) {
   const [pages, setPages] = useState<{ name: string; path: string; modifiedAt: string }[]>([])
   const [activePage, setActivePage] = useState<string | null>(null)
   const [content, setContent] = useState('')
@@ -20,8 +21,10 @@ export default function WikiView({ kbPath }: Props) {
   const ipc = useIPC()
 
   useEffect(() => {
-    ipc.listWikiPages(kbPath).then(setPages)
-  }, [kbPath])
+    if (active !== false) {
+      ipc.listWikiPages(kbPath).then(setPages)
+    }
+  }, [kbPath, active])
 
   useEffect(() => {
     ipc.buildSearchIndex(kbPath)
