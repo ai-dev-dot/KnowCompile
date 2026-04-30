@@ -11,6 +11,8 @@ import {
   extractLinks,
   getSchemaFiles,
 } from './fs-manager'
+import { chat, compileNewPages } from './llm-service'
+import { getSettings, saveSettings } from './settings-store'
 
 export function registerIPCHandlers() {
   // KB management
@@ -84,5 +86,54 @@ export function registerIPCHandlers() {
   ipcMain.handle('schema:write', (_event, filePath: string, content: string) => {
     writeFile(filePath, content)
     return { success: true }
+  })
+
+  // Settings
+  ipcMain.handle('settings:get', () => {
+    return getSettings()
+  })
+
+  ipcMain.handle('settings:save', (_event, settings) => {
+    saveSettings(settings)
+    return { success: true }
+  })
+
+  // LLM compile
+  ipcMain.handle('llm:compile', async (_event, kbPath: string, rawFilePath: string) => {
+    const fs = require('fs')
+    const path = require('path')
+    const rawContent = fs.readFileSync(rawFilePath, 'utf-8')
+    const rawName = path.basename(rawFilePath)
+
+    const wikiDir = path.join(kbPath, 'wiki')
+    const existingTitles: string[] = fs.existsSync(wikiDir)
+      ? fs.readdirSync(wikiDir)
+          .filter((f: string) => f.endsWith('.md'))
+          .map((f: string) => f.replace('.md', ''))
+      : []
+
+    return compileNewPages(rawContent, rawName, existingTitles, kbPath)
+  })
+
+  // LLM Q&A
+  ipcMain.handle('llm:qa', async (_event, kbPath: string, question: string, contextPages: string[]) => {
+    const fs = require('fs')
+    const path = require('path')
+
+    const contextContent = contextPages.map((pageName: string) => {
+      const p = path.join(kbPath, 'wiki', `${pageName}.md`)
+      if (fs.existsSync(p)) return fs.readFileSync(p, 'utf-8')
+      return ''
+    }).join('\n\n---\n\n')
+
+    const systemPath = path.join(kbPath, 'schema', 'system.md')
+    const systemContent = fs.existsSync(systemPath)
+      ? fs.readFileSync(systemPath, 'utf-8')
+      : ''
+
+    return chat([
+      { role: 'system', content: `${systemContent}\n\n你是一个基于已有知识库的问答助手。请根据提供的 Wiki 页面内容回答问题，引用来源。如果知识库中没有相关信息，请如实说明。\n\n## 知识库内容\n${contextContent}` },
+      { role: 'user', content: question },
+    ])
   })
 }
