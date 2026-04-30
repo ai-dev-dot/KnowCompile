@@ -29,7 +29,8 @@
       "Bash(timeout 10 npx electron .)",
       "Bash(netstat -ano)",
       "Bash(taskkill //F //IM node.exe)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(npx tsx *)"
     ]
   }
 }

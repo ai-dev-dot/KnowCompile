@@ -116,7 +116,7 @@ export async function compileNewPages(
   // Step 1: Analysis
   const analysisPrompt: ChatMessage[] = [
     { role: 'system', content: fullSchema },
-    { role: 'user', content: `## 资料：${rawFileName}\n\n${rawContent.slice(0, 8000)}\n${existingList}\n\n## 任务：分析（不要生成页面）\n\n请分析以上资料，回答：\n\n1. 这份资料包含哪几个核心概念？（每个概念一句话概括）\n2. 这些概念与已有 Wiki 页面有何关联？哪些是全新的，哪些可以补充已有页面？\n3. 建议创建几个新页面，更新几个已有页面？\n4. 有没有与已有页面矛盾的内容？\n\n只做分析，不要输出任何页面内容。` },
+    { role: 'user', content: `分析以下资料，识别核心概念、与已有页面的关联、页面拆分建议。只输出分析，不生成页面。\n\n## 资料：${rawFileName}\n\n${rawContent.slice(0, 8000)}\n${existingList}` },
   ]
 
   const analysis = await chat(analysisPrompt)
@@ -124,7 +124,7 @@ export async function compileNewPages(
   // Step 2: Generation
   const generationPrompt: ChatMessage[] = [
     { role: 'system', content: fullSchema },
-    { role: 'user', content: `## 资料：${rawFileName}\n\n${rawContent.slice(0, 8000)}\n${existingList}\n\n## 分析结果\n${analysis}\n\n## 任务：生成 Wiki 页面\n\n根据以上分析结果，按编译规则生成 Wiki 页面。要求：\n\n- 每个页面以 YAML frontmatter 开头（type, tags, sources, updated）\n- 页面标题以 "# " 开头\n- 来源引用用 "> 来源：${rawFileName}"\n- 只在"相关主题"章节集中放置 [[链接]]\n- 每个链接最多出现一次\n- 同时生成/更新 wiki/index.md 索引文件` },
+    { role: 'user', content: `根据分析结果生成 Wiki 页面。严格遵循页面格式模板（---开头、# 标题、> 来源：${rawFileName}、## 定义、## 核心内容、## 相关主题）。同时生成 index.md。\n\n## 资料：${rawFileName}\n\n${rawContent.slice(0, 8000)}\n${existingList}\n\n## 分析\n${analysis}` },
   ]
 
   return chat(generationPrompt)
