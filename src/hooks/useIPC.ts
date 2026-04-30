@@ -47,6 +47,8 @@ export function useIPC() {
       api.invoke('settings:save', settings) as Promise<{ success: boolean }>,
 
     // LLM
+    testLLM: (settings: { provider: string; apiKey: string; baseURL: string; model: string }) =>
+      api.invoke('llm:test', settings) as Promise<{ success: boolean; message: string }>,
     compile: (kbPath: string, rawFilePath: string) =>
       api.invoke('llm:compile', kbPath, rawFilePath) as Promise<string>,
     qa: (kbPath: string, question: string, contextPages: string[]) =>

@@ -47,6 +47,41 @@ export async function chat(messages: ChatMessage[]): Promise<string> {
   return resp.choices[0]?.message?.content || ''
 }
 
+export async function testConnection(settings: {
+  provider: string
+  apiKey: string
+  baseURL: string
+  model: string
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    if (settings.provider === 'anthropic') {
+      const client = new Anthropic({ apiKey: settings.apiKey })
+      const resp = await client.messages.create({
+        model: settings.model,
+        max_tokens: 50,
+        messages: [{ role: 'user', content: 'Hello' }],
+      })
+      const text = resp.content.filter(c => c.type === 'text').map(c => c.text).join('')
+      return { success: true, message: `连接成功！模型回复: "${text.slice(0, 50)}"` }
+    }
+
+    const client = new OpenAI({
+      apiKey: settings.apiKey,
+      baseURL: settings.baseURL || undefined,
+    })
+    const resp = await client.chat.completions.create({
+      model: settings.model,
+      messages: [{ role: 'user', content: 'Hello' }],
+      max_tokens: 50,
+    })
+    const text = resp.choices[0]?.message?.content || ''
+    return { success: true, message: `连接成功！模型回复: "${text.slice(0, 50)}"` }
+  } catch (err: any) {
+    const msg = err?.message || String(err)
+    return { success: false, message: `连接失败：${msg}` }
+  }
+}
+
 export async function compileNewPages(
   rawContent: string,
   rawFileName: string,

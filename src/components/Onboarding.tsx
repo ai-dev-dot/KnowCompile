@@ -13,6 +13,8 @@ export default function Onboarding({ onComplete }: Props) {
   const [model, setModel] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const ipc = useIPC()
 
   const handleSaveLLM = async () => {
@@ -151,7 +153,37 @@ export default function Onboarding({ onComplete }: Props) {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-8">
+            <div className="mt-4">
+              <button
+                onClick={async () => {
+                  if (!apiKey.trim() || !model.trim()) {
+                    setTestResult({ success: false, message: '请先填写 API Key 和模型名称' })
+                    return
+                  }
+                  setTesting(true)
+                  setTestResult(null)
+                  const r = await ipc.testLLM({
+                    provider,
+                    apiKey: apiKey.trim(),
+                    baseURL: baseURL.trim(),
+                    model: model.trim(),
+                  })
+                  setTestResult(r)
+                  setTesting(false)
+                }}
+                disabled={testing}
+                className="px-4 py-2 bg-gray-700 text-text rounded-lg text-sm hover:bg-gray-600 disabled:opacity-50 transition-colors"
+              >
+                {testing ? '测试中...' : '测试连接'}
+              </button>
+              {testResult && (
+                <span className={`ml-3 text-sm ${testResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                  {testResult.message}
+                </span>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-4">
               <button
                 onClick={() => setStep(0)}
                 className="px-6 py-2.5 bg-gray-800 text-text rounded-lg text-sm hover:bg-gray-700 transition-colors"

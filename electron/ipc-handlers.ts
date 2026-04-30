@@ -11,7 +11,7 @@ import {
   extractLinks,
   getSchemaFiles,
 } from './fs-manager'
-import { chat, compileNewPages } from './llm-service'
+import { chat, compileNewPages, testConnection } from './llm-service'
 import { getSettings, saveSettings } from './settings-store'
 import { buildIndex, search as searchIndex } from './search-indexer'
 import { exportHTML, exportMarkdown, backup } from './exporter'
@@ -99,6 +99,11 @@ export function registerIPCHandlers() {
   ipcMain.handle('settings:save', (_event, settings) => {
     saveSettings(settings)
     return { success: true }
+  })
+
+  // LLM test connection
+  ipcMain.handle('llm:test', async (_event, settings: { provider: string; apiKey: string; baseURL: string; model: string }) => {
+    return testConnection(settings)
   })
 
   // LLM compile

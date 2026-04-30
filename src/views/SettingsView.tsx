@@ -14,6 +14,8 @@ export default function SettingsView({ kbPath }: Props) {
   const [exportStatus, setExportStatus] = useState<string | null>(null)
   const [samplesLoaded, setSamplesLoaded] = useState(false)
   const [sampleStatus, setSampleStatus] = useState<string | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const ipc = useIPC()
 
   useEffect(() => {
@@ -97,13 +99,42 @@ export default function SettingsView({ kbPath }: Props) {
               className="w-full bg-gray-800 text-text rounded-lg px-3 py-2 text-sm mt-1 outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
-          <button
-            onClick={handleSaveSettings}
-            className="px-4 py-2 bg-accent text-gray-950 rounded-lg font-medium text-sm hover:opacity-90"
-          >
-            保存设置
-          </button>
-          {saved && <span className="text-green-400 text-sm ml-3">已保存</span>}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSaveSettings}
+              className="px-4 py-2 bg-accent text-gray-950 rounded-lg font-medium text-sm hover:opacity-90"
+            >
+              保存设置
+            </button>
+            <button
+              onClick={async () => {
+                if (!settings.llm.apiKey.trim() || !settings.llm.model.trim()) {
+                  setTestResult({ success: false, message: '请先填写 API Key 和模型名称' })
+                  return
+                }
+                setTesting(true)
+                setTestResult(null)
+                const r = await ipc.testLLM({
+                  provider: settings.llm.provider,
+                  apiKey: settings.llm.apiKey.trim(),
+                  baseURL: settings.llm.baseURL.trim(),
+                  model: settings.llm.model.trim(),
+                })
+                setTestResult(r)
+                setTesting(false)
+              }}
+              disabled={testing}
+              className="px-4 py-2 bg-gray-700 text-text rounded-lg text-sm hover:bg-gray-600 disabled:opacity-50"
+            >
+              {testing ? '测试中...' : '测试连接'}
+            </button>
+            {saved && <span className="text-green-400 text-sm">已保存</span>}
+          </div>
+          {testResult && (
+            <div className={`mt-2 text-sm ${testResult.success ? 'text-green-400' : 'text-red-400'}`}>
+              {testResult.message}
+            </div>
+          )}
         </div>
       </section>
 
