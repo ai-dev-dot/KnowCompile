@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import path from 'path'
 import { registerIPCHandlers } from './ipc-handlers'
 
@@ -27,6 +27,8 @@ function createWindow() {
 }
 
 registerIPCHandlers()
+
+Menu.setApplicationMenu(null)
 
 app.whenReady().then(createWindow)
 
