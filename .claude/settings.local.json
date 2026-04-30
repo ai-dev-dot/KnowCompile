@@ -26,7 +26,9 @@
       "Bash(npx vite *)",
       "Bash(git --no-pager log --oneline -1)",
       "Bash(npm i *)",
-      "Bash(timeout 10 npx electron .)"
+      "Bash(timeout 10 npx electron .)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //IM node.exe)"
     ]
   }
 }

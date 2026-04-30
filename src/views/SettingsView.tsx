@@ -5,7 +5,7 @@ interface Props { kbPath: string }
 
 export default function SettingsView({ kbPath }: Props) {
   const [settings, setSettings] = useState({
-    llm: { provider: 'openai', apiKey: '', baseURL: '', model: 'gpt-4o' },
+    llm: { provider: 'openai', apiKey: '', baseURL: '', model: '' },
   })
   const [schemaFiles, setSchemaFiles] = useState<{ name: string; content: string }[]>([])
   const [editingSchema, setEditingSchema] = useState<string | null>(null)
@@ -63,16 +63,6 @@ export default function SettingsView({ kbPath }: Props) {
               <option value="anthropic">Anthropic（Claude 系列）</option>
             </select>
           </div>
-          <div>
-            <label className="text-xs text-text-muted">API Key</label>
-            <input
-              type="password"
-              value={settings.llm.apiKey}
-              onChange={(e) => setSettings((s: any) => ({ ...s, llm: { ...s.llm, apiKey: e.target.value } }))}
-              className="w-full bg-gray-800 text-text rounded-lg px-3 py-2 text-sm mt-1 outline-none focus:ring-2 focus:ring-accent"
-              placeholder="sk-..."
-            />
-          </div>
           {settings.llm.provider !== 'anthropic' && (
             <div>
               <label className="text-xs text-text-muted">Base URL（可选，用于自定义接口）</label>
@@ -85,6 +75,16 @@ export default function SettingsView({ kbPath }: Props) {
               />
             </div>
           )}
+          <div>
+            <label className="text-xs text-text-muted">API Key</label>
+            <input
+              type="password"
+              value={settings.llm.apiKey}
+              onChange={(e) => setSettings((s: any) => ({ ...s, llm: { ...s.llm, apiKey: e.target.value } }))}
+              className="w-full bg-gray-800 text-text rounded-lg px-3 py-2 text-sm mt-1 outline-none focus:ring-2 focus:ring-accent"
+              placeholder="sk-..."
+            />
+          </div>
           <div>
             <label className="text-xs text-text-muted">模型</label>
             <input

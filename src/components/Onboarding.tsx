@@ -10,7 +10,7 @@ export default function Onboarding({ onComplete }: Props) {
   const [provider, setProvider] = useState('openai')
   const [apiKey, setApiKey] = useState('')
   const [baseURL, setBaseURL] = useState('')
-  const [model, setModel] = useState('gpt-4o')
+  const [model, setModel] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const ipc = useIPC()
@@ -112,17 +112,6 @@ export default function Onboarding({ onComplete }: Props) {
                 </select>
               </div>
 
-              <div>
-                <label className="text-xs text-text-muted mb-1 block">API Key</label>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="sk-..."
-                  className="w-full bg-gray-800 text-text rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-accent"
-                />
-              </div>
-
               {provider !== 'anthropic' && (
                 <div>
                   <label className="text-xs text-text-muted mb-1 block">Base URL（可选）</label>
@@ -135,6 +124,17 @@ export default function Onboarding({ onComplete }: Props) {
                   />
                 </div>
               )}
+
+              <div>
+                <label className="text-xs text-text-muted mb-1 block">API Key</label>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="sk-..."
+                  className="w-full bg-gray-800 text-text rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-accent"
+                />
+              </div>
 
               <div>
                 <label className="text-xs text-text-muted mb-1 block">模型名称</label>
