@@ -15,11 +15,27 @@ export default function WikiView({ kbPath }: Props) {
   const [backlinks, setBacklinks] = useState<string[]>([])
   const [links, setLinks] = useState<string[]>([])
   const [showPanel, setShowPanel] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<{ name: string }[] | null>(null)
   const ipc = useIPC()
 
   useEffect(() => {
     ipc.listWikiPages(kbPath).then(setPages)
   }, [kbPath])
+
+  useEffect(() => {
+    ipc.buildSearchIndex(kbPath)
+  }, [kbPath])
+
+  const handleSearch = async (q: string) => {
+    setSearchQuery(q)
+    if (q.trim().length > 0) {
+      const results = await ipc.search(q.trim())
+      setSearchResults(results)
+    } else {
+      setSearchResults(null)
+    }
+  }
 
   const loadPage = async (page: { name: string; path: string }) => {
     const text = await ipc.readWikiPage(page.path)
@@ -40,9 +56,22 @@ export default function WikiView({ kbPath }: Props) {
 
   return (
     <div className="flex flex-1 overflow-hidden">
+      {/* Search bar */}
+      <div className="px-3 py-2">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => handleSearch(e.target.value)}
+          placeholder="搜索页面..."
+          className="w-full bg-gray-800 text-text rounded-md px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-accent"
+        />
+      </div>
       <PageList
-        title="Wiki 页面"
-        pages={pages}
+        title={searchResults ? `搜索结果 (${searchResults.length})` : 'Wiki 页面'}
+        pages={searchResults
+          ? searchResults.map(r => pages.find(p => p.name === r.name) || { name: r.name, path: `${kbPath}/wiki/${r.name}.md`, modifiedAt: '' })
+          : pages
+        }
         activePage={activePage ?? undefined}
         onSelect={loadPage}
       />

@@ -13,6 +13,7 @@ import {
 } from './fs-manager'
 import { chat, compileNewPages } from './llm-service'
 import { getSettings, saveSettings } from './settings-store'
+import { buildIndex, search as searchIndex } from './search-indexer'
 
 export function registerIPCHandlers() {
   // KB management
@@ -135,5 +136,27 @@ export function registerIPCHandlers() {
       { role: 'system', content: `${systemContent}\n\n你是一个基于已有知识库的问答助手。请根据提供的 Wiki 页面内容回答问题，引用来源。如果知识库中没有相关信息，请如实说明。\n\n## 知识库内容\n${contextContent}` },
       { role: 'user', content: question },
     ])
+  })
+
+  // Search
+  ipcMain.handle('search:build', (_event, kbPath: string) => {
+    const fs = require('fs')
+    const path = require('path')
+    const wikiDir = path.join(kbPath, 'wiki')
+    if (!fs.existsSync(wikiDir)) return { success: false }
+
+    const pages = fs.readdirSync(wikiDir)
+      .filter((f: string) => f.endsWith('.md'))
+      .map((f: string) => ({
+        name: f.replace('.md', ''),
+        content: fs.readFileSync(path.join(wikiDir, f), 'utf-8'),
+      }))
+
+    buildIndex(kbPath, pages)
+    return { success: true, count: pages.length }
+  })
+
+  ipcMain.handle('search:query', (_event, query: string) => {
+    return searchIndex(query)
   })
 }
