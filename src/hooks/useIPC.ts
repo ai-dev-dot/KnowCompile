@@ -40,6 +40,24 @@ export function useIPC() {
     writeSchema: (filePath: string, content: string) =>
       api.invoke('schema:write', filePath, content) as Promise<{ success: boolean }>,
 
+    // Settings
+    getSettings: () =>
+      api.invoke('settings:get') as Promise<any>,
+    saveSettings: (settings: any) =>
+      api.invoke('settings:save', settings) as Promise<{ success: boolean }>,
+
+    // LLM
+    compile: (kbPath: string, rawFilePath: string) =>
+      api.invoke('llm:compile', kbPath, rawFilePath) as Promise<string>,
+    qa: (kbPath: string, question: string, contextPages: string[]) =>
+      api.invoke('llm:qa', kbPath, question, contextPages) as Promise<string>,
+
+    // Search
+    buildSearchIndex: (kbPath: string) =>
+      api.invoke('search:build', kbPath) as Promise<{ success: boolean; count?: number }>,
+    search: (query: string) =>
+      api.invoke('search:query', query) as Promise<{ name: string }[]>,
+
     // Generic invoke for handlers not yet typed
     invoke: (channel: string, ...args: unknown[]) =>
       api.invoke(channel, ...args),
