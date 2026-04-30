@@ -14,6 +14,7 @@ import {
 import { chat, compileNewPages } from './llm-service'
 import { getSettings, saveSettings } from './settings-store'
 import { buildIndex, search as searchIndex } from './search-indexer'
+import { exportHTML, exportMarkdown, backup } from './exporter'
 
 export function registerIPCHandlers() {
   // KB management
@@ -192,4 +193,9 @@ export function registerIPCHandlers() {
   ipcMain.handle('search:query', (_event, query: string) => {
     return searchIndex(query)
   })
+
+  // Export
+  ipcMain.handle('export:html', (_event, kbPath: string) => exportHTML(kbPath))
+  ipcMain.handle('export:markdown', (_event, kbPath: string) => exportMarkdown(kbPath))
+  ipcMain.handle('export:backup', async (_event, kbPath: string) => backup(kbPath))
 }
