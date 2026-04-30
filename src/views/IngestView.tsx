@@ -72,8 +72,13 @@ export default function IngestView({ kbPath }: Props) {
         const titleMatch = section.match(/^# (.+)$/m)
         if (titleMatch) {
           const pageName = titleMatch[1].trim()
-          wikiPages.push(pageName)
-          await ipc.writeWikiPage(`${kbPath}/wiki/${pageName}.md`, section)
+          // index.md is the wiki directory, save it separately
+          if (pageName === 'Wiki 索引' || pageName.toLowerCase() === 'wiki index') {
+            await ipc.writeWikiPage(`${kbPath}/wiki/index.md`, section)
+          } else {
+            wikiPages.push(pageName)
+            await ipc.writeWikiPage(`${kbPath}/wiki/${pageName}.md`, section)
+          }
         }
       }
 
