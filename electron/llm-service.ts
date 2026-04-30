@@ -9,6 +9,10 @@ interface ChatMessage {
   content: string
 }
 
+function stripThinking(text: string): string {
+  return text.replace(/  [\s\S]*? /g, '').trim()
+}
+
 export async function chat(messages: ChatMessage[]): Promise<string> {
   const settings = getSettings()
 
@@ -28,10 +32,12 @@ export async function chat(messages: ChatMessage[]): Promise<string> {
         content: m.content,
       })),
     })
-    return resp.content
-      .filter(c => c.type === 'text')
-      .map(c => c.text)
-      .join('\n')
+    return stripThinking(
+      resp.content
+        .filter(c => c.type === 'text')
+        .map(c => c.text)
+        .join('\n')
+    )
   }
 
   // OpenAI / custom (MiniMax, DeepSeek, Qwen, etc.)
@@ -44,7 +50,7 @@ export async function chat(messages: ChatMessage[]): Promise<string> {
     messages,
     temperature: 0.3,
   })
-  return resp.choices[0]?.message?.content || ''
+  return stripThinking(resp.choices[0]?.message?.content || '')
 }
 
 export async function testConnection(settings: {
@@ -61,7 +67,7 @@ export async function testConnection(settings: {
         max_tokens: 50,
         messages: [{ role: 'user', content: 'Hello' }],
       })
-      const text = resp.content.filter(c => c.type === 'text').map(c => c.text).join('')
+      const text = stripThinking(resp.content.filter(c => c.type === 'text').map(c => c.text).join(''))
       return { success: true, message: `连接成功！模型回复: "${text.slice(0, 50)}"` }
     }
 
@@ -74,7 +80,7 @@ export async function testConnection(settings: {
       messages: [{ role: 'user', content: 'Hello' }],
       max_tokens: 50,
     })
-    const text = resp.choices[0]?.message?.content || ''
+    const text = stripThinking(resp.choices[0]?.message?.content || '')
     return { success: true, message: `连接成功！模型回复: "${text.slice(0, 50)}"` }
   } catch (err: any) {
     const msg = err?.message || String(err)
