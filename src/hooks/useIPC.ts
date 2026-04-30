@@ -57,6 +57,12 @@ export function useIPC() {
       api.invoke('compile:check', kbPath, rawFileName) as Promise<{ compiled: boolean; wikiPages?: string[]; compiledAt?: string }>,
     logCompile: (kbPath: string, rawFileName: string, wikiPages: string[]) =>
       api.invoke('compile:log', kbPath, rawFileName, wikiPages) as Promise<{ success: boolean }>,
+    validateCompile: (content: string, pageName: string) =>
+      api.invoke('compile:validate', content, pageName) as Promise<{ pageName: string; passed: number; failed: number; warnings: number; issues: { severity: string; rule: string; message: string }[]; score: number }>,
+    validateCompileAll: (output: string) =>
+      api.invoke('compile:validate-all', output) as Promise<{ reports: { pageName: string; score: number; failed: number; warnings: number; issues: { severity: string; rule: string; message: string }[] }[]; overallScore: number }>,
+    iterateCompile: (kbPath: string, rawFilePath: string) =>
+      api.invoke('compile:iterate', kbPath, rawFilePath) as Promise<{ rawFileName: string; iterations: number; finalScore: number; compileOutput: string; history: { iteration: number; score: number }[] }>,
 
     // Search
     buildSearchIndex: (kbPath: string) =>

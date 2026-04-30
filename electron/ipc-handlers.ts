@@ -16,6 +16,7 @@ import { getSettings, saveSettings } from './settings-store'
 import { buildIndex, search as searchIndex } from './search-indexer'
 import { exportHTML, exportMarkdown, backup } from './exporter'
 import { SAMPLE_FILES } from './samples'
+import { validateCompileOutput, validateMultiPage } from './compile-validator'
 
 export function registerIPCHandlers() {
   // KB management
@@ -134,6 +135,56 @@ export function registerIPCHandlers() {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(logPath, JSON.stringify(log, null, 2), 'utf-8')
     return { success: true }
+  })
+
+  // Compile quality validation
+  ipcMain.handle('compile:validate', (_event, content: string, pageName: string) => {
+    return validateCompileOutput(content, pageName)
+  })
+
+  ipcMain.handle('compile:validate-all', (_event, output: string) => {
+    return validateMultiPage(output)
+  })
+
+  // Self-improving compile: iterate until quality threshold met
+  ipcMain.handle('compile:iterate', async (_event, kbPath: string, rawFilePath: string) => {
+    const fs = require('fs')
+    const path = require('path')
+    const rawContent = fs.readFileSync(rawFilePath, 'utf-8')
+    const rawName = path.basename(rawFilePath)
+
+    const wikiDir = path.join(kbPath, 'wiki')
+    const existingTitles: string[] = fs.existsSync(wikiDir)
+      ? fs.readdirSync(wikiDir).filter((f: string) => f.endsWith('.md')).map((f: string) => f.replace('.md', ''))
+      : []
+
+    const maxIterations = 3
+    const targetScore = 80
+    const results: { iteration: number; score: number; output: string }[] = []
+
+    for (let i = 0; i < maxIterations; i++) {
+      const compileResult = await compileNewPages(rawContent, rawName, existingTitles, kbPath)
+      const validation = validateMultiPage(compileResult)
+      results.push({ iteration: i + 1, score: validation.overallScore, output: compileResult })
+
+      if (validation.overallScore >= targetScore) break
+
+      // Feed issues back into compile prompt for next iteration
+      if (i < maxIterations - 1) {
+        const allIssues = validation.reports
+          .flatMap(r => r.issues.filter(iss => iss.severity === 'error'))
+          .map(iss => `- ${iss.message}`)
+        if (allIssues.length === 0) break
+      }
+    }
+
+    return {
+      rawFileName: rawName,
+      iterations: results.length,
+      finalScore: results[results.length - 1].score,
+      compileOutput: results[results.length - 1].output,
+      history: results.map(r => ({ iteration: r.iteration, score: r.score })),
+    }
   })
 
   // LLM compile

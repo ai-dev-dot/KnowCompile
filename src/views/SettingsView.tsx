@@ -16,6 +16,8 @@ export default function SettingsView({ kbPath }: Props) {
   const [sampleStatus, setSampleStatus] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [qualityTestResult, setQualityTestResult] = useState<{ finalScore: number; iterations: number; history: { iteration: number; score: number }[] } | null>(null)
+  const [qualityTesting, setQualityTesting] = useState(false)
   const ipc = useIPC()
 
   useEffect(() => {
@@ -136,6 +138,77 @@ export default function SettingsView({ kbPath }: Props) {
             </div>
           )}
         </div>
+      </section>
+
+      {/* Compile Quality Test */}
+      <section className="mb-8">
+        <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">编译质量测试</h3>
+        <p className="text-text-muted text-xs mb-3">
+          编译 raw/ 中的第一个文件，自动验证输出格式（YAML frontmatter、链接规范、来源引用等）并输出质量评分。低于 80 分会自动迭代优化，最多 3 轮。
+        </p>
+        <button
+          onClick={async () => {
+            setQualityTesting(true)
+            setQualityTestResult(null)
+            try {
+              const files = await ipc.listRawFiles(kbPath)
+              if (files.length === 0) {
+                setQualityTestResult({ finalScore: 0, iterations: 0, history: [] })
+                return
+              }
+              const r = await ipc.iterateCompile(kbPath, files[0].path)
+              setQualityTestResult({ finalScore: r.finalScore, iterations: r.iterations, history: r.history })
+              // Save the best output to wiki
+              const sections = r.compileOutput.split(/(?=^# )/m).filter((s: string) => s.trim())
+              for (const section of sections) {
+                const titleMatch = section.match(/^# (.+)$/m)
+                if (titleMatch) {
+                  const pageName = titleMatch[1].trim()
+                  if (pageName === 'Wiki 索引' || pageName.toLowerCase() === 'wiki index') {
+                    await ipc.writeWikiPage(`${kbPath}/wiki/index.md`, section)
+                  } else {
+                    await ipc.writeWikiPage(`${kbPath}/wiki/${pageName}.md`, section)
+                  }
+                }
+              }
+            } catch (err) {
+              setQualityTestResult({ finalScore: -1, iterations: 0, history: [] })
+            } finally {
+              setQualityTesting(false)
+            }
+          }}
+          disabled={qualityTesting}
+          className="px-4 py-2 bg-accent text-gray-950 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+        >
+          {qualityTesting ? '测试中...' : '运行编译质量测试'}
+        </button>
+        {qualityTestResult && (
+          <div className={`mt-3 p-4 rounded-lg ${qualityTestResult.finalScore <= 0 ? 'bg-red-500/10 text-red-400' : qualityTestResult.finalScore >= 80 ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+            {qualityTestResult.finalScore <= 0 ? (
+              <div>
+                <p className="font-semibold text-sm">测试失败</p>
+                <p className="text-xs mt-1">请确保 raw/ 中有文件且 LLM 配置正确</p>
+              </div>
+            ) : (
+              <div>
+                <p className="font-semibold text-sm">
+                  最终评分：{qualityTestResult.finalScore}/100
+                  {qualityTestResult.finalScore >= 80 ? ' ✅ 通过' : ' ⚠ 需优化'}
+                </p>
+                <p className="text-xs mt-1">迭代 {qualityTestResult.iterations} 轮</p>
+                {qualityTestResult.history.length > 1 && (
+                  <div className="flex gap-2 mt-2">
+                    {qualityTestResult.history.map((h, i) => (
+                      <span key={i} className="text-xs px-2 py-0.5 rounded bg-gray-700">
+                        第{h.iteration}轮: {h.score}分
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Schema Editor */}
