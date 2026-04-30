@@ -15,6 +15,7 @@ import { chat, compileNewPages } from './llm-service'
 import { getSettings, saveSettings } from './settings-store'
 import { buildIndex, search as searchIndex } from './search-indexer'
 import { exportHTML, exportMarkdown, backup } from './exporter'
+import { SAMPLE_FILES } from './samples'
 
 export function registerIPCHandlers() {
   // KB management
@@ -207,4 +208,82 @@ export function registerIPCHandlers() {
   ipcMain.handle('export:html', (_event, kbPath: string) => exportHTML(kbPath))
   ipcMain.handle('export:markdown', (_event, kbPath: string) => exportMarkdown(kbPath))
   ipcMain.handle('export:backup', async (_event, kbPath: string) => backup(kbPath))
+
+  // Samples
+  ipcMain.handle('samples:load', (_event, kbPath: string) => {
+    const fs = require('fs')
+    const path = require('path')
+    const rawDir = path.join(kbPath, 'raw')
+    if (!fs.existsSync(rawDir)) fs.mkdirSync(rawDir, { recursive: true })
+
+    for (const sample of SAMPLE_FILES) {
+      const destPath = path.join(rawDir, sample.name)
+      if (!fs.existsSync(destPath)) {
+        fs.writeFileSync(destPath, sample.content, 'utf-8')
+      }
+    }
+
+    // Initialize tracking manifest
+    const manifestPath = path.join(kbPath, '.ai-notes', 'sample-pages.json')
+    fs.writeFileSync(manifestPath, '[]', 'utf-8')
+
+    return { success: true, count: SAMPLE_FILES.length }
+  })
+
+  ipcMain.handle('samples:track-page', (_event, kbPath: string, pageName: string) => {
+    const fs = require('fs')
+    const path = require('path')
+    const manifestPath = path.join(kbPath, '.ai-notes', 'sample-pages.json')
+    let pages: string[] = []
+    if (fs.existsSync(manifestPath)) {
+      try { pages = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) } catch { pages = [] }
+    }
+    if (!pages.includes(pageName)) {
+      pages.push(pageName)
+      fs.writeFileSync(manifestPath, JSON.stringify(pages, null, 2), 'utf-8')
+    }
+    return { success: true }
+  })
+
+  ipcMain.handle('samples:delete', (_event, kbPath: string) => {
+    const fs = require('fs')
+    const path = require('path')
+    const rawDir = path.join(kbPath, 'raw')
+    const wikiDir = path.join(kbPath, 'wiki')
+    const manifestPath = path.join(kbPath, '.ai-notes', 'sample-pages.json')
+
+    // Delete sample files from raw/
+    if (fs.existsSync(rawDir)) {
+      for (const sample of SAMPLE_FILES) {
+        const filePath = path.join(rawDir, sample.name)
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+      }
+    }
+
+    // Delete tracked wiki pages
+    let pages: string[] = []
+    if (fs.existsSync(manifestPath)) {
+      try { pages = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) } catch { pages = [] }
+    }
+    if (fs.existsSync(wikiDir)) {
+      for (const pageName of pages) {
+        const pagePath = path.join(wikiDir, `${pageName}.md`)
+        if (fs.existsSync(pagePath)) fs.unlinkSync(pagePath)
+      }
+    }
+
+    // Remove manifest
+    if (fs.existsSync(manifestPath)) fs.unlinkSync(manifestPath)
+
+    return { success: true, deletedPages: pages }
+  })
+
+  ipcMain.handle('samples:check', (_event, kbPath: string) => {
+    const fs = require('fs')
+    const path = require('path')
+    const rawDir = path.join(kbPath, 'raw')
+    const hasSamples = fs.existsSync(rawDir) &&
+      SAMPLE_FILES.some(s => fs.existsSync(path.join(rawDir, s.name)))
+    return { loaded: hasSamples }
+  })
 }

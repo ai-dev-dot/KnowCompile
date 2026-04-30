@@ -47,15 +47,21 @@ export default function IngestView({ kbPath }: Props) {
     setCompileResult(null)
     try {
       const result = await ipc.compile(kbPath, filePath)
+      const rawName = filePath.replace(/^.*[\\/]/, '')
       const titleMatch = result.match(/^# (.+)$/m)
+      let pageName = ''
       if (titleMatch) {
-        const title = titleMatch[1].trim()
-        await ipc.writeWikiPage(`${kbPath}/wiki/${title}.md`, result)
+        pageName = titleMatch[1].trim()
       } else {
-        // Fallback: use the raw file name (without extension) as the page name
-        const fallbackName = filePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '')
-        await ipc.writeWikiPage(`${kbPath}/wiki/${fallbackName}.md`, result)
+        pageName = rawName.replace(/\.[^.]+$/, '')
       }
+      await ipc.writeWikiPage(`${kbPath}/wiki/${pageName}.md`, result)
+
+      // Track sample-generated pages for clean deletion later
+      if (rawName.startsWith('sample-')) {
+        await ipc.trackSamplePage(kbPath, pageName)
+      }
+
       setCompileResult(`编译完成，页面已生成`)
     } catch (err) {
       setCompileResult(`编译失败：${err}`)

@@ -12,11 +12,14 @@ export default function SettingsView({ kbPath }: Props) {
   const [editContent, setEditContent] = useState('')
   const [saved, setSaved] = useState(false)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
+  const [samplesLoaded, setSamplesLoaded] = useState(false)
+  const [sampleStatus, setSampleStatus] = useState<string | null>(null)
   const ipc = useIPC()
 
   useEffect(() => {
     ipc.getSettings().then(setSettings)
     ipc.listSchema(kbPath).then(setSchemaFiles)
+    ipc.checkSamples(kbPath).then(r => setSamplesLoaded(r.loaded))
   }, [kbPath])
 
   const handleSaveSettings = async () => {
@@ -138,6 +141,48 @@ export default function SettingsView({ kbPath }: Props) {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Sample Data */}
+      <section className="mb-8">
+        <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">示例数据</h3>
+        <p className="text-text-muted text-xs mb-3">
+          {samplesLoaded
+            ? '已加载 AI 应用开发相关的示例文档。删除示例会同时清理 raw 文件和编译生成的 Wiki 页面。'
+            : '加载 AI 应用开发相关的示例文档到 raw/ 目录，快速体验 LLM Wiki 的完整流程。'}
+        </p>
+        <div className="flex gap-3">
+          {!samplesLoaded ? (
+            <button
+              onClick={async () => {
+                const r = await ipc.loadSamples(kbPath)
+                if (r.success) {
+                  setSamplesLoaded(true)
+                  setSampleStatus(`已加载 ${r.count} 个示例文件，请到摄入页编译它们`)
+                }
+              }}
+              className="px-4 py-2 bg-accent text-gray-950 rounded-lg text-sm font-medium hover:opacity-90"
+            >
+              加载示例数据
+            </button>
+          ) : (
+            <button
+              onClick={async () => {
+                const r = await ipc.deleteSamples(kbPath)
+                if (r.success) {
+                  setSamplesLoaded(false)
+                  setSampleStatus(`已删除示例文件${r.deletedPages && r.deletedPages.length > 0 ? `和 ${r.deletedPages.length} 个 Wiki 页面` : ''}`)
+                }
+              }}
+              className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/30"
+            >
+              删除示例数据
+            </button>
+          )}
+        </div>
+        {sampleStatus && (
+          <div className="mt-3 p-3 rounded-lg bg-accent/10 text-accent text-sm">{sampleStatus}</div>
+        )}
       </section>
 
       {/* Export & Backup */}

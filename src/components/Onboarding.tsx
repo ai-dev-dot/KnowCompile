@@ -34,7 +34,7 @@ export default function Onboarding({ onComplete }: Props) {
     setStep(step + 1)
   }
 
-  const handleSelectDir = async () => {
+  const handleSelectDir = async (loadSamples = false) => {
     setLoading(true)
     setError(null)
     try {
@@ -43,6 +43,9 @@ export default function Onboarding({ onComplete }: Props) {
         await handleSaveLLM()
         await ipc.initKB(path)
         await ipc.setKBPath(path)
+        if (loadSamples) {
+          await ipc.loadSamples(path)
+        }
         onComplete(path)
       }
     } catch (err) {
@@ -195,6 +198,19 @@ export default function Onboarding({ onComplete }: Props) {
             >
               {loading ? '初始化中...' : '选择目录'}
             </button>
+
+            <div className="mt-6 pt-6 border-t border-gray-800">
+              <p className="text-text-muted text-xs mb-3">
+                首次使用？加载示例数据快速体验
+              </p>
+              <button
+                onClick={() => handleSelectDir(true)}
+                disabled={loading}
+                className="px-6 py-2 bg-gray-800 text-text rounded-lg text-sm hover:bg-gray-700 disabled:opacity-50 transition-colors"
+              >
+                加载示例数据并开始
+              </button>
+            </div>
 
             <div className="mt-4">
               <button

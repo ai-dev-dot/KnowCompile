@@ -62,6 +62,16 @@ export function useIPC() {
     getGraphData: (kbPath: string) =>
       api.invoke('graph:data', kbPath) as Promise<{ nodes: { id: string; label: string; linkCount: number }[]; edges: { source: string; target: string }[] }>,
 
+    // Samples
+    loadSamples: (kbPath: string) =>
+      api.invoke('samples:load', kbPath) as Promise<{ success: boolean; count?: number }>,
+    deleteSamples: (kbPath: string) =>
+      api.invoke('samples:delete', kbPath) as Promise<{ success: boolean; deletedPages?: string[] }>,
+    trackSamplePage: (kbPath: string, pageName: string) =>
+      api.invoke('samples:track-page', kbPath, pageName) as Promise<{ success: boolean }>,
+    checkSamples: (kbPath: string) =>
+      api.invoke('samples:check', kbPath) as Promise<{ loaded: boolean }>,
+
     // Export
     exportHTML: (kbPath: string) =>
       api.invoke('export:html', kbPath) as Promise<{ success: boolean; path?: string; error?: string }>,
