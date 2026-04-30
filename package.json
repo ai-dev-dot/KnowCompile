@@ -9,7 +9,9 @@
     "build:main": "tsc -p tsconfig.node.json",
     "dev:main": "npm run build:main && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "dev:all": "concurrently \"vite\" \"wait-on http://localhost:5173 && npm run dev:main\"",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "pack": "npm run build:main && vite build && electron-builder --dir",
+    "dist": "npm run build:main && vite build && electron-builder"
   },
   "license": "MIT",
   "author": "ai-dev-dot",

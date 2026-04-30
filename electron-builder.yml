@@ -1,0 +1,24 @@
+appId: com.ai-notes.app
+productName: AI 笔记
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+win:
+  target: nsis
+  icon: resources/icon.ico
+mac:
+  target: dmg
+  icon: resources/icon.icns
+  category: public.app-category.productivity
+linux:
+  target: AppImage
+  icon: resources/icon.png
+  category: Office
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
