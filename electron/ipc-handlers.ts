@@ -214,7 +214,11 @@ export function registerIPCHandlers() {
       nodes.push({ id: name, label: name, linkCount: linkCount[name] || 0 })
     }
 
-    return { nodes, edges }
+    // Filter edges to only include those where both source and target are actual nodes
+    const nodeIds = new Set(nodes.map(n => n.id))
+    const validEdges = edges.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
+
+    return { nodes, edges: validEdges }
   })
 
   // Search
