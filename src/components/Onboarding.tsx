@@ -76,14 +76,16 @@ export default function Onboarding({ onComplete }: Props) {
         {/* Step 0: Welcome */}
         {step === 0 && (
           <div className="text-center">
-            <div className="w-16 h-16 rounded-2xl bg-accent text-gray-950 flex items-center justify-center text-2xl font-bold mx-auto mb-6">
-              AI
+            <div className="w-16 h-16 rounded-2xl bg-accent text-gray-950 flex items-center justify-center text-xl font-bold mx-auto mb-6">
+              知译
             </div>
-            <h1 className="text-2xl font-bold text-text mb-3">欢迎使用 AI 笔记</h1>
+            <h1 className="text-2xl font-bold text-text mb-3">欢迎使用 KnowCompile</h1>
             <p className="text-text-muted leading-relaxed mb-8">
-              基于 LLM Wiki 范式的个人知识管理工具。
+              知识的<span className="text-accent">编译器</span>，把资料编译成你的第二大脑。
               <br />
-              将你的资料<span className="text-accent">编译</span>成结构化知识库，
+              基于 LLM Wiki 范式，将原始资料转化为结构化知识，
+              <br />
+              <span className="text-accent">一次编译，永久复用</span>，让知识持续积累。
               <br />
               让 AI 帮你<span className="text-accent">持续积累</span>而非反复检索。
             </p>
@@ -101,7 +103,7 @@ export default function Onboarding({ onComplete }: Props) {
           <div>
             <h2 className="text-xl font-semibold text-text mb-2">配置大模型</h2>
             <p className="text-text-muted text-sm mb-6">
-              AI 笔记的核心功能依赖大语言模型。你可以现在配置，也可以稍后在设置中配置。
+              KnowCompile 的核心功能依赖大语言模型。你可以现在配置，也可以稍后在设置中配置。
             </p>
 
             <div className="space-y-4">

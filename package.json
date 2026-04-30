@@ -1,7 +1,7 @@
 {
-  "name": "ai-notes",
+  "name": "knowcompile",
   "version": "0.1.0",
-  "description": "AI 笔记 - 基于 LLM Wiki 的个人知识管理工具",
+  "description": "知译 KnowCompile - 把资料编译成你的第二大脑",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",

@@ -17,7 +17,7 @@ export default function IconSidebar({ active, onChange }: Props) {
   return (
     <nav className="flex flex-col items-center w-[56px] bg-sidebar py-4 gap-2 flex-shrink-0 border-r border-border">
       <div className="w-9 h-9 rounded-lg bg-accent text-gray-950 flex items-center justify-center font-bold text-sm mb-4">
-        AI
+        KC
       </div>
       {icons.map(({ id, label, icon }) => (
         <button

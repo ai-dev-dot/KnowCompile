@@ -1,5 +1,5 @@
-appId: com.ai-notes.app
-productName: AI 笔记
+appId: com.knowcompile.app
+productName: 知译 KnowCompile
 directories:
   output: release
   buildResources: resources

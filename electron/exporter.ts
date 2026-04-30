@@ -33,7 +33,7 @@ a{color:#89b4fa}blockquote{border-left:3px solid #cba6f7;padding-left:1em;color:
       fs.writeFileSync(path.join(exportDir, page.replace('.md', '.html')), html, 'utf-8')
     }
 
-    const indexHTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>AI 笔记 - Wiki</title>
+    const indexHTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>知译 KnowCompile - Wiki</title>
 <style>body{max-width:800px;margin:0 auto;padding:2em;font-family:sans-serif;line-height:1.8}</style></head><body>
 <h1>Wiki 页面</h1><nav><ul>${nav}</ul></nav></body></html>`
     fs.writeFileSync(path.join(exportDir, 'index.html'), indexHTML, 'utf-8')

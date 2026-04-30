@@ -10,7 +10,7 @@ function createWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: 'AI 笔记',
+    title: '知译 KnowCompile',
     backgroundColor: '#1e1e2e',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
