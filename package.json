@@ -17,7 +17,11 @@
   "author": "ai-dev-dot",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
+    "@huggingface/transformers": "^4.2.0",
+    "@lancedb/lancedb": "^0.27.2",
+    "@types/better-sqlite3": "^7.6.13",
     "archiver": "^7.0.1",
+    "better-sqlite3": "^12.9.0",
     "chokidar": "^5.0.0",
     "cytoscape": "^3.33.3",
     "flexsearch": "^0.8.212",
