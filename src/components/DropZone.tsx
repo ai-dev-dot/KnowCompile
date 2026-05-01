@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 
 interface Props {
   onFilesDrop: (paths: string[]) => void
@@ -6,14 +6,31 @@ interface Props {
 
 export default function DropZone({ onFilesDrop }: Props) {
   const [dragging, setDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const extractPaths = useCallback((files: FileList) => {
+    const paths = Array.from(files)
+      .map(f => (f as any).path)
+      .filter(Boolean)
+    if (paths.length > 0) onFilesDrop(paths)
+  }, [onFilesDrop])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setDragging(false)
-    const files = Array.from(e.dataTransfer.files)
-    const paths = files.map(f => (f as any).path).filter(Boolean)
-    if (paths.length > 0) onFilesDrop(paths)
-  }, [onFilesDrop])
+    extractPaths(e.dataTransfer.files)
+  }, [extractPaths])
+
+  const handleBrowse = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      extractPaths(e.target.files)
+      e.target.value = '' // Reset so same file can be re-selected
+    }
+  }
 
   return (
     <div
@@ -28,9 +45,25 @@ export default function DropZone({ onFilesDrop }: Props) {
     >
       <p className="text-4xl mb-4">📥</p>
       <p className="text-text text-lg mb-2">拖放文件到此处</p>
-      <p className="text-text-muted text-sm">
+      <p className="text-text-muted text-sm mb-4">
         支持 PDF、Markdown、纯文本等格式
       </p>
+      <div className="text-text-muted text-xs mb-3">— 或者 —</div>
+      <button
+        type="button"
+        onClick={handleBrowse}
+        className="px-4 py-2 bg-gray-700 text-text rounded-lg text-sm hover:bg-gray-600 transition-colors"
+      >
+        浏览文件
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.md,.txt,.markdown,.html,.htm"
+        onChange={handleFileChange}
+        className="hidden"
+      />
     </div>
   )
 }

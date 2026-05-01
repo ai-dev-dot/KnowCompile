@@ -78,7 +78,7 @@ export function validateCompileOutput(content: string, pageName: string): Valida
   }
 
   // 2. No thinking tags
-  if (/  /i.test(content)) {
+  if (/<think>/i.test(content)) {
     issues.push({ severity: 'error', rule: 'no-think-tags', message: '输出中包含 <think> 推理标签，未被过滤' })
   }
 

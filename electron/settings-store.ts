@@ -37,6 +37,18 @@ export function getSettings(): Settings {
   }
 }
 
+/** Return settings safe for the renderer — API key is masked. */
+export function getPublicSettings(): Settings {
+  const s = getSettings()
+  if (s.llm.apiKey) {
+    const key = s.llm.apiKey
+    s.llm.apiKey = key.length > 8
+      ? key.slice(0, 4) + '...' + key.slice(-4)
+      : '****'
+  }
+  return s
+}
+
 export function saveSettings(settings: Settings): void {
   const p = getSettingsPath()
   const dir = path.dirname(p)

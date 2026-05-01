@@ -80,6 +80,7 @@ export function extractBacklinks(kbPath: string, pageName: string): string[] {
   for (const file of fs.readdirSync(wikiDir)) {
     if (!file.endsWith('.md')) continue
     const content = fs.readFileSync(path.join(wikiDir, file), 'utf-8')
+    linkPattern.lastIndex = 0
     let match
     while ((match = linkPattern.exec(content)) !== null) {
       if (match[1] === pageName) {

@@ -1,7 +1,22 @@
 import { useState, useEffect } from 'react'
 import { useIPC } from '../hooks/useIPC'
+import { LLM_PROVIDERS, findProvider } from '../providers'
 
 interface Props { kbPath: string }
+
+/** Guess provider ID from saved settings. Returns custom if no match. */
+function guessProviderId(baseURL: string, model: string, sdkProvider: string): string {
+  if (sdkProvider === 'anthropic') return 'anthropic'
+  // Try to match by baseURL
+  const byURL = LLM_PROVIDERS.find(p => p.baseURL && baseURL && p.baseURL.startsWith(baseURL.split('/v1')[0] ?? ''))
+  if (byURL && !byURL.useAnthropicSDK) return byURL.id
+  // Try to match by model prefix
+  const byModel = LLM_PROVIDERS.find(p => p.models.some(m => m.id === model))
+  if (byModel && !byModel.useAnthropicSDK) return byModel.id
+  return 'custom'
+}
+
+const CUSTOM_MODEL = '__custom__'
 
 export default function SettingsView({ kbPath }: Props) {
   const [activeTab, setActiveTab] = useState<'general' | 'advanced'>('general')
@@ -10,6 +25,9 @@ export default function SettingsView({ kbPath }: Props) {
   const [settings, setSettings] = useState({
     llm: { provider: 'openai', apiKey: '', baseURL: '', model: '' },
   })
+  const [selectedProviderId, setSelectedProviderId] = useState('openai')
+  const [selectedModelId, setSelectedModelId] = useState('gpt-4o')
+  const [customModel, setCustomModel] = useState('')
   const [saved, setSaved] = useState(false)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
   const [samplesLoaded, setSamplesLoaded] = useState(false)
@@ -36,7 +54,23 @@ export default function SettingsView({ kbPath }: Props) {
 
   useEffect(() => {
     if (activeTab === 'general') {
-      ipc.getSettings().then(setSettings)
+      ipc.getSettings().then(s => {
+        setSettings(s)
+        // Sync provider dropdown with saved settings
+        const pid = guessProviderId(s.llm.baseURL || '', s.llm.model || '', s.llm.provider)
+        setSelectedProviderId(pid)
+        const prov = findProvider(pid)
+        if (prov && prov.models.some(m => m.id === s.llm.model)) {
+          setSelectedModelId(s.llm.model)
+          setCustomModel('')
+        } else if (pid === 'custom' || !prov || prov.models.length === 0) {
+          setSelectedModelId(CUSTOM_MODEL)
+          setCustomModel(s.llm.model || '')
+        } else {
+          setSelectedModelId(prov.models[0].id)
+          setCustomModel('')
+        }
+      })
       ipc.checkSamples(kbPath).then(r => setSamplesLoaded(r.loaded))
       ipc.checkSchemaUpdate(kbPath).then(setSchemaUpdate)
     } else {
@@ -60,7 +94,16 @@ export default function SettingsView({ kbPath }: Props) {
   // -- General tab handlers --
 
   const handleSaveSettings = async () => {
-    await ipc.saveSettings(settings)
+    const effectiveModel = selectedModelId === CUSTOM_MODEL ? customModel.trim() : selectedModelId
+    const prov = findProvider(selectedProviderId)
+    await ipc.saveSettings({
+      llm: {
+        provider: prov?.useAnthropicSDK ? 'anthropic' : 'openai',
+        apiKey: settings.llm.apiKey,
+        baseURL: prov?.useAnthropicSDK ? '' : (settings.llm.baseURL || ''),
+        model: effectiveModel,
+      },
+    })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -91,6 +134,7 @@ export default function SettingsView({ kbPath }: Props) {
   }
 
   const handleRebuild = async () => {
+    if (!window.confirm('确定要重建所有索引吗？这可能需要几分钟时间，期间 Wiki 搜索和问答功能可能受影响。')) return
     setRebuilding(true)
     setRebuildResult(null)
     const r = await ipc.rebuildIndex(kbPath)
@@ -146,31 +190,98 @@ export default function SettingsView({ kbPath }: Props) {
         <>
           {/* LLM Config */}
           <section className="mb-8">
-            <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">LLM 配置</h3>
+            <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">AI 模型配置</h3>
             <div className="space-y-3">
+              {/* Provider selector */}
               <div>
-                <label className={labelClass}>提供商</label>
+                <label className={labelClass}>模型服务商</label>
                 <select
-                  value={settings.llm.provider}
-                  onChange={(e) => setSettings((s: any) => ({ ...s, llm: { ...s.llm, provider: e.target.value } }))}
+                  value={selectedProviderId}
+                  onChange={(e) => {
+                    const id = e.target.value
+                    setSelectedProviderId(id)
+                    setTestResult(null)
+                    const p = findProvider(id)
+                    if (p) {
+                      setSettings((s: any) => ({ ...s, llm: { ...s.llm, baseURL: p.baseURL } }))
+                      if (p.models.length > 0) {
+                        setSelectedModelId(p.models[0].id)
+                        setCustomModel('')
+                      } else {
+                        setSelectedModelId(CUSTOM_MODEL)
+                        setCustomModel('')
+                      }
+                    }
+                  }}
                   className={inputClass}
                 >
-                  <option value="openai">OpenAI 兼容（OpenAI / MiniMax / DeepSeek / Qwen）</option>
-                  <option value="anthropic">Anthropic（Claude 系列）</option>
+                  {LLM_PROVIDERS.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
                 </select>
               </div>
-              {settings.llm.provider !== 'anthropic' && (
+
+              {/* Base URL (auto-filled, editable for non-Anthropic) */}
+              {!findProvider(selectedProviderId)?.useAnthropicSDK && (
                 <div>
-                  <label className={labelClass}>Base URL（可选，用于自定义接口）</label>
+                  <label className={labelClass}>API 地址</label>
                   <input
                     type="text"
-                    value={settings.llm.baseURL}
+                    value={settings.llm.baseURL || ''}
                     onChange={(e) => setSettings((s: any) => ({ ...s, llm: { ...s.llm, baseURL: e.target.value } }))}
                     className={inputClass}
-                    placeholder="留空使用默认 API"
+                    placeholder="https://api.example.com/v1"
                   />
                 </div>
               )}
+
+              {/* Model selector */}
+              <div>
+                <label className={labelClass}>模型</label>
+                {(() => {
+                  const prov = findProvider(selectedProviderId)
+                  if (prov && prov.models.length > 0) {
+                    return (
+                      <>
+                        <select
+                          value={selectedModelId}
+                          onChange={(e) => {
+                            setSelectedModelId(e.target.value)
+                            setTestResult(null)
+                          }}
+                          className={inputClass}
+                        >
+                          {prov.models.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                          <option value={CUSTOM_MODEL}>其他模型（手动输入）...</option>
+                        </select>
+                        {selectedModelId === CUSTOM_MODEL && (
+                          <input
+                            type="text"
+                            value={customModel}
+                            onChange={(e) => setCustomModel(e.target.value)}
+                            placeholder="输入模型名称"
+                            className={inputClass + ' mt-2'}
+                            autoFocus
+                          />
+                        )}
+                      </>
+                    )
+                  }
+                  return (
+                    <input
+                      type="text"
+                      value={customModel}
+                      onChange={(e) => setCustomModel(e.target.value)}
+                      className={inputClass}
+                      placeholder="输入模型名称"
+                    />
+                  )
+                })()}
+              </div>
+
+              {/* API Key */}
               <div>
                 <label className={labelClass}>API Key</label>
                 <input
@@ -181,30 +292,23 @@ export default function SettingsView({ kbPath }: Props) {
                   placeholder="sk-..."
                 />
               </div>
-              <div>
-                <label className={labelClass}>模型</label>
-                <input
-                  type="text"
-                  value={settings.llm.model}
-                  onChange={(e) => setSettings((s: any) => ({ ...s, llm: { ...s.llm, model: e.target.value } }))}
-                  className={inputClass}
-                />
-              </div>
               <div className="flex items-center gap-3">
                 <button onClick={handleSaveSettings} className={btnPrimaryClass}>保存设置</button>
                 <button
                   onClick={async () => {
-                    if (!settings.llm.apiKey.trim() || !settings.llm.model.trim()) {
+                    const effectiveModel = selectedModelId === CUSTOM_MODEL ? customModel.trim() : selectedModelId
+                    if (!settings.llm.apiKey.trim() || !effectiveModel) {
                       setTestResult({ success: false, message: '请先填写 API Key 和模型名称' })
                       return
                     }
                     setTesting(true)
                     setTestResult(null)
+                    const prov = findProvider(selectedProviderId)
                     const r = await ipc.testLLM({
-                      provider: settings.llm.provider,
+                      provider: prov?.useAnthropicSDK ? 'anthropic' : 'openai',
                       apiKey: settings.llm.apiKey.trim(),
-                      baseURL: settings.llm.baseURL.trim(),
-                      model: settings.llm.model.trim(),
+                      baseURL: prov?.useAnthropicSDK ? '' : (settings.llm.baseURL || '').trim(),
+                      model: effectiveModel,
                     })
                     setTestResult(r)
                     setTesting(false)
@@ -282,6 +386,7 @@ export default function SettingsView({ kbPath }: Props) {
               ) : (
                 <button
                   onClick={async () => {
+                    if (!window.confirm('确定要删除所有示例数据和对应的 Wiki 页面吗？此操作不可撤销。')) return
                     const r = await ipc.deleteSamples(kbPath)
                     if (r.success) {
                       setSamplesLoaded(false)
@@ -429,10 +534,8 @@ export default function SettingsView({ kbPath }: Props) {
                     <div className="flex items-center gap-3">
                       <button
                         onClick={async () => {
-                          const schemaFilePath = selectedSchemaFile.includes('/') || selectedSchemaFile.includes('\\')
-                            ? selectedSchemaFile
-                            : kbPath + '/schema/' + selectedSchemaFile
-                          const r = await ipc.writeSchema(schemaFilePath, schemaEditContent)
+                          const subpath = `schema/${selectedSchemaFile}`
+                          const r = await ipc.writeSchema(kbPath, subpath, schemaEditContent)
                           if (r.success) {
                             setSchemaSaveStatus(`已保存 ${selectedSchemaFile}`)
                             // Refresh file list

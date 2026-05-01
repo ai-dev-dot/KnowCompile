@@ -18,6 +18,8 @@ import { VectorDB } from './vector-db'
 import type { ChunkInput, SearchResult } from './vector-db'
 import { EmbeddingService } from './embedding-service'
 import { compileNewPages, chat } from './llm-service'
+import { distanceToSimilarity } from './vector-utils'
+import { loadSchemaPrompt } from './schema-loader'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
@@ -61,38 +63,42 @@ async function readRawFile(filePath: string): Promise<{ content: string; size: n
 }
 
 /**
- * Convert LanceDB L2 distance to cosine similarity for normalized vectors.
- *
- * For unit-norm vectors:  cos(θ) = 1 - d²/2
- * where d = ||u-v|| is the Euclidean distance between two normalized vectors.
- */
-function distanceToSimilarity(distance: number): number {
-  return Math.max(0, 1 - (distance * distance) / 2)
-}
-
-/**
  * Split the multi-page markdown output from compileNewPages() into individual
  * page objects with title and full markdown content.
  *
  * Pages start with "# Title" (level-1 heading). The index page is skipped.
  */
-function splitWikiPages(output: string): { title: string; content: string }[] {
+export function splitWikiPages(output: string): { title: string; content: string }[] {
   // Split on "# " at start of line (level-1 heading).
   const sections = output.split(/(?=^# )/m).filter(s => s.trim())
   const pages: { title: string; content: string }[] = []
 
+  let pendingFrontmatter = ''
+
   for (const section of sections) {
     const titleMatch = section.match(/^# (.+)$/m)
-    if (!titleMatch) continue
+    if (!titleMatch) {
+      // Orphan frontmatter — save it to prepend to the next valid page.
+      if (/^---/.test(section.trim())) {
+        pendingFrontmatter = section.trim()
+      }
+      continue
+    }
 
     const title = titleMatch[1].trim()
 
     // Skip the index/index.md page — it is metadata, not a real wiki page.
     if (title === 'Wiki 索引' || title.toLowerCase() === 'wiki index' || title === 'index') {
+      pendingFrontmatter = ''
       continue
     }
 
-    pages.push({ title, content: section.trim() })
+    const content = pendingFrontmatter
+      ? pendingFrontmatter + '\n\n' + section.trim()
+      : section.trim()
+    pendingFrontmatter = ''
+
+    pages.push({ title, content })
   }
 
   return pages
@@ -107,7 +113,7 @@ function splitWikiPages(output: string): { title: string; content: string }[] {
  *
  * Returns the parsed object or null on failure.
  */
-function parsePlanJson(text: string): CompilePlan | null {
+export function parsePlanJson(text: string): CompilePlan | null {
   // Strip thinking tags that may have leaked through.
   const cleanText = text.replace(/<\s*think\s*>[\s\S]*?<\/\s*think\s*>/gi, '').trim()
 
@@ -149,25 +155,6 @@ function parsePlanJson(text: string): CompilePlan | null {
   }
 }
 
-/**
- * Build the system prompt for the verification step by reading schema files
- * from `<kbPath>/schema/`.
- */
-function loadSchemaPrompt(kbPath: string): string {
-  const schemaDir = path.join(kbPath, 'schema')
-  const files = ['system.md', 'compile-rules.md', 'style-guide.md', 'links-rules.md']
-
-  const parts: string[] = []
-  for (const file of files) {
-    const filePath = path.join(schemaDir, file)
-    if (fs.existsSync(filePath)) {
-      parts.push(fs.readFileSync(filePath, 'utf-8'))
-    }
-  }
-
-  return parts.join('\n\n')
-}
-
 /** Trim text to approximately `maxLen` characters for LLM context windows. */
 function trimContent(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text
@@ -196,6 +183,7 @@ export async function incrementalCompile(
   embedding: EmbeddingService,
   db: IndexDB,
   vdb: VectorDB,
+  overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
 ): Promise<CompileResult> {
   // ------------------------------------------------------------------
   // Read settings from DB (with defaults)
@@ -390,7 +378,7 @@ export async function incrementalCompile(
 
   let plan: CompilePlan
   try {
-    const planResponse = await chat(planMessages)
+    const planResponse = await chat(planMessages, overrideSettings)
     const parsed = parsePlanJson(planResponse)
     if (parsed) {
       plan = parsed
@@ -416,7 +404,7 @@ export async function incrementalCompile(
   // STEP 4 — Generate wiki pages via compileNewPages
   // ==================================================================
 
-  const compileOutput = await compileNewPages(rawContent, rawFileName, existingTitles, kbPath)
+  const compileOutput = await compileNewPages(rawContent, rawFileName, existingTitles, kbPath, overrideSettings)
 
   // ==================================================================
   // STEP 5 — Write pages, handle conflicts, update index

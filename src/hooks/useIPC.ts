@@ -15,12 +15,12 @@ export function useIPC() {
     // Wiki
     listWikiPages: (kbPath: string) =>
       api.invoke('wiki:list', kbPath) as Promise<{ name: string; path: string; modifiedAt: string }[]>,
-    readWikiPage: (filePath: string) =>
-      api.invoke('wiki:read', filePath) as Promise<string>,
-    writeWikiPage: (filePath: string, content: string) =>
-      api.invoke('wiki:write', filePath, content) as Promise<{ success: boolean }>,
-    deleteWikiPage: (filePath: string) =>
-      api.invoke('wiki:delete', filePath) as Promise<{ success: boolean }>,
+    readWikiPage: (kbPath: string, subpath: string) =>
+      api.invoke('wiki:read', kbPath, subpath) as Promise<string>,
+    writeWikiPage: (kbPath: string, subpath: string, content: string) =>
+      api.invoke('wiki:write', kbPath, subpath, content) as Promise<{ success: boolean }>,
+    deleteWikiPage: (kbPath: string, subpath: string) =>
+      api.invoke('wiki:delete', kbPath, subpath) as Promise<{ success: boolean }>,
     getBacklinks: (kbPath: string, pageName: string) =>
       api.invoke('wiki:backlinks', kbPath, pageName) as Promise<string[]>,
     extractLinks: (content: string) =>
@@ -31,14 +31,14 @@ export function useIPC() {
       api.invoke('raw:list', kbPath) as Promise<{ name: string; path: string; size: number; addedAt: string }[]>,
     copyToRaw: (kbPath: string, sourcePath: string) =>
       api.invoke('raw:copy', kbPath, sourcePath) as Promise<{ success: boolean; name?: string; error?: string }>,
-    readRawFile: (filePath: string) =>
-      api.invoke('raw:read', filePath) as Promise<string>,
+    readRawFile: (kbPath: string, subpath: string) =>
+      api.invoke('raw:read', kbPath, subpath) as Promise<string>,
 
     // Schema
     listSchema: (kbPath: string) =>
       api.invoke('schema:list', kbPath) as Promise<{ name: string; content: string }[]>,
-    writeSchema: (filePath: string, content: string) =>
-      api.invoke('schema:write', filePath, content) as Promise<{ success: boolean }>,
+    writeSchema: (kbPath: string, subpath: string, content: string) =>
+      api.invoke('schema:write', kbPath, subpath, content) as Promise<{ success: boolean }>,
     checkSchemaUpdate: (kbPath: string) =>
       api.invoke('schema:check-update', kbPath) as Promise<{ updateAvailable: boolean; currentVersion: number; latestVersion: number }>,
     updateSchema: (kbPath: string) =>
@@ -55,8 +55,7 @@ export function useIPC() {
       api.invoke('llm:test', settings) as Promise<{ success: boolean; message: string }>,
     compile: (kbPath: string, rawFilePath: string) =>
       api.invoke('llm:compile', kbPath, rawFilePath) as Promise<string>,
-    qa: (kbPath: string, question: string, contextPages: string[]) =>
-      api.invoke('llm:qa', kbPath, question, contextPages) as Promise<string>,
+
     checkCompileStatus: (kbPath: string, rawFileName: string) =>
       api.invoke('compile:check', kbPath, rawFileName) as Promise<{ compiled: boolean; wikiPages?: string[]; compiledAt?: string }>,
     logCompile: (kbPath: string, rawFileName: string, wikiPages: string[]) =>
@@ -71,8 +70,8 @@ export function useIPC() {
     // Search
     buildSearchIndex: (kbPath: string) =>
       api.invoke('search:build', kbPath) as Promise<{ success: boolean; count?: number }>,
-    search: (query: string) =>
-      api.invoke('search:query', query) as Promise<{ name: string }[]>,
+    search: (kbPath: string, query: string) =>
+      api.invoke('search:query', kbPath, query) as Promise<{ name: string }[]>,
 
     // Graph
     getGraphData: (kbPath: string) =>

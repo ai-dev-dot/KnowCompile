@@ -12,7 +12,7 @@ import {
   getSchemaFiles,
 } from './fs-manager'
 import { chat, compileNewPages, testConnection } from './llm-service'
-import { getSettings, saveSettings } from './settings-store'
+import { getSettings, getPublicSettings, saveSettings } from './settings-store'
 import { buildIndex, search as searchIndex } from './search-indexer'
 import { exportHTML, exportMarkdown, backup } from './exporter'
 import { SAMPLE_FILES } from './samples'
@@ -24,6 +24,8 @@ import { IndexRebuilder } from './index-rebuilder'
 import { incrementalCompile } from './compile-service'
 import { semanticQA } from './qa-service'
 import pathModule from 'path'
+import { resolveSafePath } from './path-utils'
+import { loadSchemaPrompt } from './schema-loader'
 
 export function registerIPCHandlers() {
   // Lazy service initialization
@@ -79,17 +81,17 @@ export function registerIPCHandlers() {
     return listWikiPages(kbPath)
   })
 
-  ipcMain.handle('wiki:read', (_event, filePath: string) => {
-    return readFile(filePath)
+  ipcMain.handle('wiki:read', (_event, kbPath: string, subpath: string) => {
+    return readFile(resolveSafePath(kbPath, subpath))
   })
 
-  ipcMain.handle('wiki:write', (_event, filePath: string, content: string) => {
-    writeFile(filePath, content)
+  ipcMain.handle('wiki:write', (_event, kbPath: string, subpath: string, content: string) => {
+    writeFile(resolveSafePath(kbPath, subpath), content)
     return { success: true }
   })
 
-  ipcMain.handle('wiki:delete', (_event, filePath: string) => {
-    deleteFile(filePath)
+  ipcMain.handle('wiki:delete', (_event, kbPath: string, subpath: string) => {
+    deleteFile(resolveSafePath(kbPath, subpath))
     return { success: true }
   })
 
@@ -110,8 +112,8 @@ export function registerIPCHandlers() {
     return copyToRaw(kbPath, sourcePath)
   })
 
-  ipcMain.handle('raw:read', (_event, filePath: string) => {
-    return readFile(filePath)
+  ipcMain.handle('raw:read', (_event, kbPath: string, subpath: string) => {
+    return readFile(resolveSafePath(kbPath, subpath))
   })
 
   // Schema
@@ -119,8 +121,8 @@ export function registerIPCHandlers() {
     return getSchemaFiles(kbPath)
   })
 
-  ipcMain.handle('schema:write', (_event, filePath: string, content: string) => {
-    writeFile(filePath, content)
+  ipcMain.handle('schema:write', (_event, kbPath: string, subpath: string, content: string) => {
+    writeFile(resolveSafePath(kbPath, subpath), content)
     return { success: true }
   })
 
@@ -135,10 +137,17 @@ export function registerIPCHandlers() {
 
   // Settings
   ipcMain.handle('settings:get', () => {
-    return getSettings()
+    return getPublicSettings()
   })
 
   ipcMain.handle('settings:save', (_event, settings) => {
+    // If the API key looks masked (from getPublicSettings), preserve the real key
+    if (settings.llm?.apiKey?.includes('...')) {
+      const currentKey = getSettings().llm.apiKey
+      if (currentKey && currentKey.length > 8) {
+        settings.llm.apiKey = currentKey
+      }
+    }
     saveSettings(settings)
     return { success: true }
   })
@@ -158,7 +167,8 @@ export function registerIPCHandlers() {
       const log = JSON.parse(fs.readFileSync(logPath, 'utf-8'))
       const entry = log[rawFileName]
       return entry ? { compiled: true, wikiPages: entry.pages, compiledAt: entry.at } : { compiled: false }
-    } catch {
+    } catch (err) {
+      console.error('Failed to read compile-log.json:', err)
       return { compiled: false }
     }
   })
@@ -169,7 +179,7 @@ export function registerIPCHandlers() {
     const logPath = path.join(kbPath, '.ai-notes', 'compile-log.json')
     let log: Record<string, { pages: string[]; at: string }> = {}
     if (fs.existsSync(logPath)) {
-      try { log = JSON.parse(fs.readFileSync(logPath, 'utf-8')) } catch { log = {} }
+      try { log = JSON.parse(fs.readFileSync(logPath, 'utf-8')) } catch (err) { console.error('Failed to parse compile-log.json:', err); log = {} }
     }
     log[rawFileName] = { pages: wikiPages, at: new Date().toISOString() }
     const dir = path.dirname(logPath)
@@ -217,15 +227,7 @@ export function registerIPCHandlers() {
           .map(iss => `[${iss.severity}] ${iss.rule}: ${iss.message}`)
           .join('\n')
 
-        const systemPath = require('path').join(kbPath, 'schema', 'system.md')
-        const rulesPath = require('path').join(kbPath, 'schema', 'compile-rules.md')
-        const stylePath = require('path').join(kbPath, 'schema', 'style-guide.md')
-        const fs = require('fs')
-        const schema = [
-          fs.existsSync(systemPath) ? fs.readFileSync(systemPath, 'utf-8') : '',
-          fs.existsSync(rulesPath) ? fs.readFileSync(rulesPath, 'utf-8') : '',
-          fs.existsSync(stylePath) ? fs.readFileSync(stylePath, 'utf-8') : '',
-        ].join('\n\n')
+        const schema = loadSchemaPrompt(kbPath)
 
         compileResult = await chat([
           { role: 'system', content: schema },
@@ -275,28 +277,6 @@ export function registerIPCHandlers() {
     return compileNewPages(rawContent, rawName, existingTitles, kbPath)
   })
 
-  // LLM Q&A
-  ipcMain.handle('llm:qa', async (_event, kbPath: string, question: string, contextPages: string[]) => {
-    const fs = require('fs')
-    const path = require('path')
-
-    const contextContent = contextPages.map((pageName: string) => {
-      const p = path.join(kbPath, 'wiki', `${pageName}.md`)
-      if (fs.existsSync(p)) return fs.readFileSync(p, 'utf-8')
-      return ''
-    }).join('\n\n---\n\n')
-
-    const systemPath = path.join(kbPath, 'schema', 'system.md')
-    const systemContent = fs.existsSync(systemPath)
-      ? fs.readFileSync(systemPath, 'utf-8')
-      : ''
-
-    return chat([
-      { role: 'system', content: `${systemContent}\n\n你是一个基于已有知识库的问答助手。请根据提供的 Wiki 页面内容回答问题，引用来源。如果知识库中没有相关信息，请如实说明。\n\n## 知识库内容\n${contextContent}` },
-      { role: 'user', content: question },
-    ])
-  })
-
   // Graph data
   ipcMain.handle('graph:data', (_event, kbPath: string) => {
     const fs = require('fs')
@@ -312,10 +292,7 @@ export function registerIPCHandlers() {
     for (const file of files) {
       const name = file.replace('.md', '')
       const content = fs.readFileSync(path.join(wikiDir, file), 'utf-8')
-      const pattern = /\[\[([^\]]+)\]\]/g
-      let match
-      while ((match = pattern.exec(content)) !== null) {
-        const target = match[1]
+      for (const target of extractLinks(content)) {
         edges.push({ source: name, target })
         linkCount[name] = (linkCount[name] || 0) + 1
         linkCount[target] = (linkCount[target] || 0) + 1
@@ -352,8 +329,8 @@ export function registerIPCHandlers() {
     return { success: true, count: pages.length }
   })
 
-  ipcMain.handle('search:query', (_event, query: string) => {
-    return searchIndex(query)
+  ipcMain.handle('search:query', (_event, kbPath: string, query: string) => {
+    return searchIndex(kbPath, query)
   })
 
   // Export
@@ -388,7 +365,7 @@ export function registerIPCHandlers() {
     const manifestPath = path.join(kbPath, '.ai-notes', 'sample-pages.json')
     let pages: string[] = []
     if (fs.existsSync(manifestPath)) {
-      try { pages = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) } catch { pages = [] }
+      try { pages = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) } catch (err) { console.error('Failed to parse sample manifest:', err); pages = [] }
     }
     if (!pages.includes(pageName)) {
       pages.push(pageName)
@@ -415,7 +392,7 @@ export function registerIPCHandlers() {
     // Delete tracked wiki pages
     let pages: string[] = []
     if (fs.existsSync(manifestPath)) {
-      try { pages = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) } catch { pages = [] }
+      try { pages = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) } catch (err) { console.error('Failed to parse sample manifest:', err); pages = [] }
     }
     if (fs.existsSync(wikiDir)) {
       for (const pageName of pages) {

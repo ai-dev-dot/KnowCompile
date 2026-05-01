@@ -52,7 +52,12 @@ export default function IngestView({ kbPath }: Props) {
   }
 
   const handleDelete = async (filePath: string) => {
-    await ipc.deleteWikiPage(filePath)
+    if (!window.confirm('确定要删除此文件吗？此操作不可撤销。')) return
+    // Convert absolute path to kbPath + relative subpath
+    if (filePath.startsWith(kbPath)) {
+      const subpath = filePath.slice(kbPath.length).replace(/^[/\\]/, '')
+      await ipc.deleteWikiPage(kbPath, subpath)
+    }
     await loadAll()
   }
 
@@ -74,10 +79,10 @@ export default function IngestView({ kbPath }: Props) {
           const pageName = titleMatch[1].trim()
           // index.md is the wiki directory, save it separately
           if (pageName === 'Wiki 索引' || pageName.toLowerCase() === 'wiki index') {
-            await ipc.writeWikiPage(`${kbPath}/wiki/index.md`, section)
+            await ipc.writeWikiPage(kbPath, 'wiki/index.md', section)
           } else {
             wikiPages.push(pageName)
-            await ipc.writeWikiPage(`${kbPath}/wiki/${pageName}.md`, section)
+            await ipc.writeWikiPage(kbPath, `wiki/${pageName}.md`, section)
           }
         }
       }
@@ -86,7 +91,7 @@ export default function IngestView({ kbPath }: Props) {
       if (wikiPages.length === 0) {
         const pageName = rawName.replace(/\.[^.]+$/, '')
         wikiPages.push(pageName)
-        await ipc.writeWikiPage(`${kbPath}/wiki/${pageName}.md`, result.compileOutput)
+        await ipc.writeWikiPage(kbPath, `wiki/${pageName}.md`, result.compileOutput)
       }
 
       // Track in compile log

@@ -1,10 +1,10 @@
 import FlexSearch from 'flexsearch'
 import type { Document as FlexDocument } from 'flexsearch'
 
-let index: FlexDocument | null = null
+const indexes = new Map<string, FlexDocument>()
 
 export function buildIndex(kbPath: string, pages: { name: string; content: string }[]): void {
-  index = new FlexSearch.Document({
+  const index = new FlexSearch.Document({
     document: {
       id: 'name',
       index: ['content'],
@@ -17,9 +17,12 @@ export function buildIndex(kbPath: string, pages: { name: string; content: strin
   for (const page of pages) {
     index.add({ name: page.name, content: page.content })
   }
+
+  indexes.set(kbPath, index)
 }
 
-export function search(query: string): { name: string }[] {
+export function search(kbPath: string, query: string): { name: string }[] {
+  const index = indexes.get(kbPath)
   if (!index) return []
   const results = index.search(query, { limit: 20 })
   const seen = new Set<string>()

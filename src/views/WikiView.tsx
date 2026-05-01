@@ -33,7 +33,7 @@ export default function WikiView({ kbPath, active }: Props) {
   const handleSearch = async (q: string) => {
     setSearchQuery(q)
     if (q.trim().length > 0) {
-      const results = await ipc.search(q.trim())
+      const results = await ipc.search(kbPath, q.trim())
       setSearchResults(results)
     } else {
       setSearchResults(null)
@@ -41,7 +41,7 @@ export default function WikiView({ kbPath, active }: Props) {
   }
 
   const loadPage = async (page: { name: string; path: string }) => {
-    const text = await ipc.readWikiPage(page.path)
+    const text = await ipc.readWikiPage(kbPath, `wiki/${page.name}.md`)
     setActivePage(page.path)
     setContent(text)
     const bl = await ipc.getBacklinks(kbPath, page.name)

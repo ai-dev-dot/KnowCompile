@@ -17,6 +17,7 @@ import { VectorDB } from './vector-db'
 import type { SearchResult } from './vector-db'
 import { EmbeddingService } from './embedding-service'
 import { chat } from './llm-service'
+import { distanceToSimilarity } from './vector-utils'
 import fs from 'fs'
 import path from 'path'
 
@@ -38,25 +39,11 @@ interface WeightedChunk {
 }
 
 // ---------------------------------------------------------------------------
-// Distance / similarity conversion
-// ---------------------------------------------------------------------------
-
-/**
- * Convert LanceDB L2 distance to cosine similarity for normalized vectors.
- *
- * For unit-norm vectors:  cos(θ) = 1 - d²/2
- * where d = ||u-v|| is the Euclidean distance between two normalized vectors.
- */
-function distanceToSimilarity(distance: number): number {
-  return Math.max(0, 1 - (distance * distance) / 2)
-}
-
-// ---------------------------------------------------------------------------
 // Token estimation
 // ---------------------------------------------------------------------------
 
 /** Rough token count estimate: Chinese chars / 2 ≈ tokens. */
-function estimateTokens(text: string): number {
+export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 2)
 }
 
@@ -89,7 +76,8 @@ function getSettingNum(
   key: string,
   defaultValue: number,
 ): number {
-  const raw = db.getSetting(key, String(defaultValue))
+  const raw = db.getSetting(key)
+  if (raw === undefined || raw === null || raw === '') return defaultValue
   const n = Number(raw)
   return Number.isFinite(n) ? n : defaultValue
 }
@@ -104,6 +92,7 @@ export async function semanticQA(
   embedding: EmbeddingService,
   db: IndexDB,
   vdb: VectorDB,
+  overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
 ): Promise<QAResult> {
   // -------------------------------------------------------------------
   // Step 1 — Preprocess: generate question embedding
@@ -265,7 +254,7 @@ export async function semanticQA(
   const response = await chat([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userMessage },
-  ])
+  ], overrideSettings)
 
   // -------------------------------------------------------------------
   // Step 6 — Post-process: assemble sources list
