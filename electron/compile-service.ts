@@ -109,7 +109,7 @@ function splitWikiPages(output: string): { title: string; content: string }[] {
  */
 function parsePlanJson(text: string): CompilePlan | null {
   // Strip thinking tags that may have leaked through.
-  const cleanText = text.replace(/  [\s\S]*? /g, '').trim()
+  const cleanText = text.replace(/<\s*think\s*>[\s\S]*?<\/\s*think\s*>/gi, '').trim()
 
   // Strategy 1: look for a fenced JSON block.
   const fenceMatch = cleanText.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
@@ -248,7 +248,8 @@ export async function incrementalCompile(
   }
   const sourceId = source.id!
 
-  // Chunk + embed the raw content.
+  try {
+    // Chunk + embed the raw content.
   const chunks = embedding.chunkText(rawContent, chunkSize)
   let chunkVectors: number[][] = []
   if (chunks.length > 0) {
@@ -400,7 +401,8 @@ export async function incrementalCompile(
     } else {
       throw new Error('Failed to parse plan JSON from LLM response')
     }
-  } catch {
+  } catch (err) {
+    console.warn('Failed to parse plan JSON from LLM response:', err)
     // Fallback: create a simple plan with one new page based on the filename.
     const fallbackTitle = rawFileName.replace(/\.[^.]+$/, '')
     plan = {
@@ -537,5 +539,10 @@ export async function incrementalCompile(
     compileOutput,
     plan,
     candidatePages: candidatePageTitles,
+  }
+  } catch (err) {
+    console.error('incrementalCompile failed:', err)
+    db.updateSourceStatus(sourcePath, 'failed')
+    throw err
   }
 }
