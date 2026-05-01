@@ -219,4 +219,12 @@ export class EmbeddingService {
   getDimension(): number {
     return this.dimension
   }
+
+  /** Release the ONNX model and free memory. */
+  async dispose(): Promise<void> {
+    if (this.extractor) {
+      await this.extractor.dispose()
+      this.extractor = null
+    }
+  }
 }
