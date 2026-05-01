@@ -2,19 +2,27 @@ import { useState, useEffect, useRef } from 'react'
 import ChatMessage from '../components/ChatMessage'
 import { useIPC } from '../hooks/useIPC'
 
+interface Source {
+  title: string
+  chunk_index: number
+  similarity: number
+}
+
+interface Message {
+  role: 'user' | 'assistant'
+  content: string
+  sources?: Source[]
+  archived?: boolean
+}
+
 interface Props { kbPath: string }
 
 export default function QAView({ kbPath }: Props) {
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; sources?: string[] }[]>([])
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [pageNames, setPageNames] = useState<string[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const ipc = useIPC()
-
-  useEffect(() => {
-    ipc.listWikiPages(kbPath).then(pages => setPageNames(pages.map(p => p.name)))
-  }, [kbPath])
 
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight)
@@ -28,18 +36,43 @@ export default function QAView({ kbPath }: Props) {
     setLoading(true)
 
     try {
-      // Simple keyword matching to find relevant pages
-      const relevant = pageNames.filter(name =>
-        question.toLowerCase().includes(name.toLowerCase()) ||
-        name.toLowerCase().includes(question.toLowerCase().slice(0, 10))
-      ).slice(0, 5)
-
-      const answer = await ipc.qa(kbPath, question, relevant)
-      setMessages(prev => [...prev, { role: 'assistant', content: answer }])
+      const result = await ipc.qaV2(kbPath, question)
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: result.answer,
+        sources: result.sources,
+      }])
     } catch (err) {
       setMessages(prev => [...prev, { role: 'assistant', content: `出错了：${err}` }])
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleFeedback = (msgIdx: number, type: 'helpful' | 'inaccurate' | 'more_detail') => {
+    console.log(`Feedback for message ${msgIdx}: ${type}`)
+  }
+
+  const handleArchive = async (msgIdx: number) => {
+    const msg = messages[msgIdx]
+    if (!msg || msg.role !== 'assistant' || msg.archived) return
+
+    // Find preceding user message as question
+    let question = ''
+    for (let i = msgIdx - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        question = messages[i].content
+        break
+      }
+    }
+
+    try {
+      await ipc.archiveQA(kbPath, question, msg.content)
+      setMessages(prev => prev.map((m, i) =>
+        i === msgIdx ? { ...m, archived: true } : m
+      ))
+    } catch (err) {
+      console.error('Archive failed:', err)
     }
   }
 
@@ -51,11 +84,21 @@ export default function QAView({ kbPath }: Props) {
             <div className="text-center">
               <p className="text-4xl mb-4">💬</p>
               <p className="text-text text-lg mb-2">AI 问答</p>
-              <p className="text-text-muted text-sm">基于你的 Wiki 知识库回答问题</p>
+              <p className="text-text-muted text-sm">基于你的 Wiki 知识库，使用语义搜索回答问题</p>
             </div>
           </div>
         ) : (
-          messages.map((msg, i) => <ChatMessage key={i} {...msg} />)
+          messages.map((msg, i) => (
+            <ChatMessage
+              key={i}
+              role={msg.role}
+              content={msg.content}
+              sources={msg.sources}
+              archived={msg.archived}
+              onFeedback={msg.role === 'assistant' ? (type) => handleFeedback(i, type) : undefined}
+              onArchive={msg.role === 'assistant' ? () => handleArchive(i) : undefined}
+            />
+          ))
         )}
         {loading && (
           <div className="flex justify-start mb-4">

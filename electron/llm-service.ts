@@ -10,7 +10,7 @@ interface ChatMessage {
 }
 
 function stripThinking(text: string): string {
-  return text.replace(/  [\s\S]*? /g, '').trim()
+  return text.replace(/<\s*think\s*>[\s\S]*?<\/\s*think\s*>/gi, '').trim()
 }
 
 export async function chat(

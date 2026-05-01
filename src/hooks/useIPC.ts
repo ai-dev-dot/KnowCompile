@@ -96,6 +96,36 @@ export function useIPC() {
     backup: (kbPath: string) =>
       api.invoke('export:backup', kbPath) as Promise<{ success: boolean; path?: string; error?: string }>,
 
+    // Index
+    rebuildIndex: (kbPath: string) =>
+      api.invoke('index:rebuild', kbPath) as Promise<{ pagesIndexed: number; chunksIndexed: number; sourcesIndexed: number; errors: string[] }>,
+    getIndexStatus: (kbPath: string) =>
+      api.invoke('index:status', kbPath) as Promise<{ pages: number; sources: number; lastRebuild: string }>,
+
+    // Semantic compile
+    compileV2: (kbPath: string, rawFilePath: string) =>
+      api.invoke('llm:compile-v2', kbPath, rawFilePath) as Promise<{ compileOutput: string; plan: any; candidatePages: string[] }>,
+
+    // Semantic QA
+    qaV2: (kbPath: string, question: string) =>
+      api.invoke('llm:qa-v2', kbPath, question) as Promise<{ answer: string; sources: { title: string; chunk_index: number; similarity: number }[] }>,
+
+    // Advanced settings
+    getAdvancedSettings: (kbPath: string) =>
+      api.invoke('settings:get-advanced', kbPath) as Promise<Record<string, string>>,
+    saveAdvancedSettings: (kbPath: string, settings: Record<string, string>) =>
+      api.invoke('settings:save-advanced', kbPath, settings) as Promise<{ success: boolean }>,
+
+    // Conflicts
+    listConflicts: (kbPath: string) =>
+      api.invoke('conflicts:list', kbPath) as Promise<any[]>,
+    resolveConflict: (kbPath: string, conflictId: number, resolution: string) =>
+      api.invoke('conflicts:resolve', kbPath, conflictId, resolution) as Promise<{ success: boolean }>,
+
+    // Archive QA
+    archiveQA: (kbPath: string, question: string, answer: string) =>
+      api.invoke('wiki:archive-qa', kbPath, question, answer) as Promise<{ success: boolean; path?: string }>,
+
     // Generic invoke for handlers not yet typed
     invoke: (channel: string, ...args: unknown[]) =>
       api.invoke(channel, ...args),

@@ -145,3 +145,6 @@ vite.config.ts.timestamp-*
 
 # Superpowers
 .superpowers/
+
+# Worktrees
+.worktrees/

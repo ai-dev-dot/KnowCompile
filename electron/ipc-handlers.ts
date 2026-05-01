@@ -17,8 +17,40 @@ import { buildIndex, search as searchIndex } from './search-indexer'
 import { exportHTML, exportMarkdown, backup } from './exporter'
 import { SAMPLE_FILES } from './samples'
 import { validateCompileOutput, validateMultiPage } from './compile-validator'
+import { IndexDB } from './index-db'
+import { VectorDB } from './vector-db'
+import { EmbeddingService } from './embedding-service'
+import { IndexRebuilder } from './index-rebuilder'
+import { incrementalCompile } from './compile-service'
+import { semanticQA } from './qa-service'
+import pathModule from 'path'
 
 export function registerIPCHandlers() {
+  // Lazy service initialization
+  let indexDB: IndexDB | null = null
+  let vectorDB: VectorDB | null = null
+  let embeddingService: EmbeddingService | null = null
+
+  function getIndexDB(kbPath: string): IndexDB {
+    if (!indexDB) indexDB = new IndexDB(kbPath)
+    return indexDB
+  }
+
+  async function getVectorDB(kbPath: string): Promise<VectorDB> {
+    if (!vectorDB) {
+      vectorDB = new VectorDB(kbPath)
+      await vectorDB.initialize()
+    }
+    return vectorDB
+  }
+
+  async function getEmbeddingService(): Promise<EmbeddingService> {
+    if (!embeddingService) {
+      embeddingService = new EmbeddingService()
+      await embeddingService.initialize()
+    }
+    return embeddingService
+  }
   // KB management
   ipcMain.handle('kb:init', (_event, basePath: string) => {
     return initKnowledgeBase(basePath)
@@ -405,5 +437,104 @@ export function registerIPCHandlers() {
     const hasSamples = fs.existsSync(rawDir) &&
       SAMPLE_FILES.some(s => fs.existsSync(path.join(rawDir, s.name)))
     return { loaded: hasSamples }
+  })
+
+  // Index management
+  ipcMain.handle('index:rebuild', async (_event, kbPath: string) => {
+    const rebuilder = new IndexRebuilder(kbPath)
+    return rebuilder.rebuild()
+  })
+
+  ipcMain.handle('index:status', (_event, kbPath: string) => {
+    const db = getIndexDB(kbPath)
+    const pages = db.listPages().length
+    const sources = db.listSources().length
+    const lastRebuild = db.getSetting('last_rebuild', '从未')
+    return { pages, sources, lastRebuild }
+  })
+
+  // Semantic compile & QA (v2)
+  ipcMain.handle('llm:compile-v2', async (_event, kbPath: string, rawFilePath: string) => {
+    const db = getIndexDB(kbPath)
+    const vdb = await getVectorDB(kbPath)
+    const embedding = await getEmbeddingService()
+    return incrementalCompile(rawFilePath, kbPath, embedding, db, vdb)
+  })
+
+  ipcMain.handle('llm:qa-v2', async (_event, kbPath: string, question: string) => {
+    const db = getIndexDB(kbPath)
+    const vdb = await getVectorDB(kbPath)
+    const embedding = await getEmbeddingService()
+    return semanticQA(question, kbPath, embedding, db, vdb)
+  })
+
+  // Advanced settings
+  ipcMain.handle('settings:get-advanced', (_event, kbPath: string) => {
+    const db = getIndexDB(kbPath)
+    const defaults: Record<string, string> = {
+      chunk_size: '500',
+      compile_similarity_threshold: '0.75',
+      compile_candidate_count: '3',
+      qa_similarity_threshold: '0.65',
+      qa_retrieval_count: '30',
+      qa_final_context_count: '8',
+      qa_context_max_tokens: '3000',
+    }
+    const saved = db.getAllSettings()
+    return { ...defaults, ...saved }
+  })
+
+  ipcMain.handle('settings:save-advanced', (_event, kbPath: string, settings: Record<string, string>) => {
+    const db = getIndexDB(kbPath)
+    for (const [key, value] of Object.entries(settings)) {
+      db.setSetting(key, String(value))
+    }
+    return { success: true }
+  })
+
+  // Conflict management
+  ipcMain.handle('conflicts:list', (_event, kbPath: string) => {
+    const db = getIndexDB(kbPath)
+    return db.listOpenConflicts()
+  })
+
+  ipcMain.handle('conflicts:resolve', (_event, kbPath: string, conflictId: number, resolution: string) => {
+    const db = getIndexDB(kbPath)
+    db.resolveConflict(conflictId, resolution)
+    return { success: true }
+  })
+
+  // QA archiving
+  ipcMain.handle('wiki:archive-qa', (_event, kbPath: string, question: string, answer: string) => {
+    const fs = require('fs')
+    const path = require('path')
+    const synthesisDir = path.join(kbPath, 'wiki', 'synthesis')
+    if (!fs.existsSync(synthesisDir)) {
+      fs.mkdirSync(synthesisDir, { recursive: true })
+    }
+    const dateStr = new Date().toISOString().slice(0, 10)
+    const safeName = question.slice(0, 30).replace(/[\\/:*?"<>|]/g, '_')
+    const fileName = `问答-${dateStr}-${safeName}.md`
+    const filePath = path.join(synthesisDir, fileName)
+    const content = `---
+title: ${question}
+type: qa
+date: ${dateStr}
+---
+
+# ${question}
+
+> 来源：AI 问答归档
+
+## 问题
+
+${question}
+
+## 回答
+
+${answer}
+`
+    fs.writeFileSync(filePath, content, 'utf-8')
+    return { success: true, path: `wiki/synthesis/${fileName}` }
   })
 }

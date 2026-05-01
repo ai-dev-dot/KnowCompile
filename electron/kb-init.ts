@@ -137,6 +137,11 @@ export function initKnowledgeBase(basePath: string): { success: boolean; error?:
       const dirPath = path.join(basePath, dir)
       if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true })
     }
+    // Write .gitignore if it doesn't exist
+    const gitignorePath = path.join(basePath, '.gitignore')
+    if (!fs.existsSync(gitignorePath)) {
+      fs.writeFileSync(gitignorePath, '.index/\n.ai-notes/\n', 'utf-8')
+    }
     for (const [filename, content] of Object.entries(DEFAULT_SCHEMA)) {
       const filePath = path.join(basePath, 'schema', filename)
       if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, content, 'utf-8')

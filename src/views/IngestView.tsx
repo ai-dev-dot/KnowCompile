@@ -63,11 +63,11 @@ export default function IngestView({ kbPath }: Props) {
     const rawName = filePath.replace(/^.*[\\/]/, '')
 
     try {
-      const result = await ipc.compile(kbPath, filePath)
+      const result = await ipc.compileV2(kbPath, filePath)
       const wikiPages: string[] = []
 
       // LLM may generate multiple pages (split by "# " headers)
-      const sections = result.split(/(?=^# )/m).filter(s => s.trim())
+      const sections = result.compileOutput.split(/(?=^# )/m).filter(s => s.trim())
       for (const section of sections) {
         const titleMatch = section.match(/^# (.+)$/m)
         if (titleMatch) {
@@ -86,7 +86,7 @@ export default function IngestView({ kbPath }: Props) {
       if (wikiPages.length === 0) {
         const pageName = rawName.replace(/\.[^.]+$/, '')
         wikiPages.push(pageName)
-        await ipc.writeWikiPage(`${kbPath}/wiki/${pageName}.md`, result)
+        await ipc.writeWikiPage(`${kbPath}/wiki/${pageName}.md`, result.compileOutput)
       }
 
       // Track in compile log
@@ -105,7 +105,14 @@ export default function IngestView({ kbPath }: Props) {
         [rawName]: { compiled: true, wikiPages, compiledAt: new Date().toISOString() },
       }))
 
-      setCompileResult(`编译完成，已生成 ${wikiPages.length} 个 Wiki 页面：${wikiPages.join('、')}`)
+      let resultMsg = `编译完成，已生成 ${wikiPages.length} 个 Wiki 页面：${wikiPages.join('、')}`
+      if (result.candidatePages.length > 0) {
+        resultMsg += `\n向量检索候选页面：${result.candidatePages.join('、')}`
+      }
+      if (result.plan.conflicts?.length > 0) {
+        resultMsg += `\n发现 ${result.plan.conflicts.length} 个矛盾点，请在设置页查看`
+      }
+      setCompileResult(resultMsg)
     } catch (err) {
       setCompileResult(`编译失败：${err}`)
     } finally {
