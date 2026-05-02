@@ -1,4 +1,4 @@
-type View = 'wiki' | 'ingest' | 'qa' | 'graph' | 'settings'
+type View = 'wiki' | 'ingest' | 'qa' | 'graph' | 'settings' | 'system'
 
 const icons: { id: View; label: string; icon: string }[] = [
   { id: 'wiki', label: 'Wiki', icon: '📖' },
@@ -6,6 +6,7 @@ const icons: { id: View; label: string; icon: string }[] = [
   { id: 'qa', label: '问答', icon: '💬' },
   { id: 'graph', label: '图谱', icon: '🔗' },
   { id: 'settings', label: '设置', icon: '⚙' },
+  { id: 'system', label: '系统', icon: '🖥' },
 ]
 
 interface Props {

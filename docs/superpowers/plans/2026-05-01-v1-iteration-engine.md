@@ -1,5 +1,7 @@
 # v1.0 迭代引擎 Implementation Plan
 
+> **2026-05-02 更新：全部开发任务已完成。今日计划改为人工测试验收。**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 实现 LLM Wiki 迭代闭环：索引层（SQLite + LanceDB + bge-m3）、增量编译、语义问答、矛盾检测、设置页重构。

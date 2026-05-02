@@ -284,6 +284,10 @@ export class IndexDB {
     }
   }
 
+  deleteSource(sourcePath: string): void {
+    this.db.prepare('DELETE FROM sources WHERE path = ?').run(sourcePath)
+  }
+
   // -----------------------------------------------------------------------
   // Links
   // -----------------------------------------------------------------------

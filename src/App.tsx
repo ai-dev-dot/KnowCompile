@@ -6,9 +6,10 @@ import IngestView from './views/IngestView'
 import QAView from './views/QAView'
 import GraphView from './views/GraphView'
 import SettingsView from './views/SettingsView'
+import SystemView from './views/SystemView'
 import { useIPC } from './hooks/useIPC'
 
-type View = 'wiki' | 'ingest' | 'qa' | 'graph' | 'settings'
+type View = 'wiki' | 'ingest' | 'qa' | 'graph' | 'settings' | 'system'
 
 export default function App() {
   const [activeView, setActiveView] = useState<View>('wiki')
@@ -50,10 +51,11 @@ export default function App() {
       <IconSidebar active={activeView} onChange={setActiveView} />
       <div className="flex-1 flex overflow-hidden">
         <div className={activeView === 'wiki' ? 'flex flex-1 overflow-hidden' : 'hidden'}><WikiView kbPath={kbPath} active={activeView === 'wiki'} /></div>
-        <div className={activeView === 'ingest' ? 'flex flex-1 overflow-hidden' : 'hidden'}><IngestView kbPath={kbPath} /></div>
+        <div className={activeView === 'ingest' ? 'flex flex-1 overflow-hidden' : 'hidden'}><IngestView kbPath={kbPath} active={activeView === 'ingest'} /></div>
         <div className={activeView === 'qa' ? 'flex flex-1 overflow-hidden' : 'hidden'}><QAView kbPath={kbPath} /></div>
         <div className={activeView === 'graph' ? 'flex flex-1 overflow-hidden' : 'hidden'}><GraphView kbPath={kbPath} /></div>
         <div className={activeView === 'settings' ? 'flex flex-1 overflow-hidden' : 'hidden'}><SettingsView kbPath={kbPath} /></div>
+        <div className={activeView === 'system' ? 'flex flex-1 overflow-hidden' : 'hidden'}><SystemView kbPath={kbPath} active={activeView === 'system'} /></div>
       </div>
     </div>
   )

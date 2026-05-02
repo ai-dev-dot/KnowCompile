@@ -53,6 +53,26 @@ export function registerIPCHandlers() {
     }
     return embeddingService
   }
+
+  function dirSizeKB(dirPath: string): number {
+    const fs = require('fs')
+    const path = require('path')
+    if (!fs.existsSync(dirPath)) return 0
+    let total = 0
+    try {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+      for (const entry of entries) {
+        const full = path.join(dirPath, entry.name)
+        if (entry.isDirectory()) {
+          total += dirSizeKB(full)
+        } else if (entry.isFile()) {
+          total += fs.statSync(full).size
+        }
+      }
+    } catch { /* permissions — return 0 */ }
+    return Math.round(total / 1024)
+  }
+
   // KB management
   ipcMain.handle('kb:init', (_event, basePath: string) => {
     return initKnowledgeBase(basePath)
@@ -342,13 +362,29 @@ export function registerIPCHandlers() {
   ipcMain.handle('samples:load', (_event, kbPath: string) => {
     const fs = require('fs')
     const path = require('path')
+    const crypto = require('crypto')
     const rawDir = path.join(kbPath, 'raw')
     if (!fs.existsSync(rawDir)) fs.mkdirSync(rawDir, { recursive: true })
+
+    const db = getIndexDB(kbPath)
 
     for (const sample of SAMPLE_FILES) {
       const destPath = path.join(rawDir, sample.name)
       if (!fs.existsSync(destPath)) {
         fs.writeFileSync(destPath, sample.content, 'utf-8')
+      }
+      // Register in SQLite if not already tracked
+      const sourcePath = `raw/${sample.name}`
+      if (!db.getSourceByPath(sourcePath)) {
+        const stat = fs.statSync(destPath)
+        const hash = crypto.createHash('sha256').update(sample.content).digest('hex')
+        db.addSource({
+          path: sourcePath,
+          filename: sample.name,
+          size: stat.size,
+          hash,
+          status: 'pending',
+        })
       }
     }
 
@@ -404,6 +440,43 @@ export function registerIPCHandlers() {
     // Remove manifest
     if (fs.existsSync(manifestPath)) fs.unlinkSync(manifestPath)
 
+    // Clean up compile-log.json entries for sample files
+    const logPath = path.join(kbPath, '.ai-notes', 'compile-log.json')
+    if (fs.existsSync(logPath)) {
+      try {
+        const log = JSON.parse(fs.readFileSync(logPath, 'utf-8'))
+        for (const sample of SAMPLE_FILES) {
+          delete log[sample.name]
+        }
+        for (const pageName of pages) {
+          for (const key of Object.keys(log)) {
+            if (log[key].pages?.includes(pageName)) {
+              delete log[key]
+            }
+          }
+        }
+        fs.writeFileSync(logPath, JSON.stringify(log, null, 2), 'utf-8')
+      } catch (err) { console.error('Failed to clean compile-log.json:', err) }
+    }
+
+    // Clean up SQLite entries (sources and pages)
+    const db = getIndexDB(kbPath)
+    for (const sample of SAMPLE_FILES) {
+      const sourcePath = `raw/${sample.name}`
+      const source = db.getSourceByPath(sourcePath)
+      if (source?.id) {
+        // Delete page records for pages generated from this source
+        if (pages.length > 0) {
+          for (const pageName of pages) {
+            const page = db.getPageByPath(`wiki/${pageName}.md`)
+            if (page?.id) db.deletePage(`wiki/${pageName}.md`)
+          }
+        }
+        // Delete source record
+        db.deleteSource(sourcePath)
+      }
+    }
+
     return { success: true, deletedPages: pages }
   })
 
@@ -417,9 +490,11 @@ export function registerIPCHandlers() {
   })
 
   // Index management
-  ipcMain.handle('index:rebuild', async (_event, kbPath: string) => {
+  ipcMain.handle('index:rebuild', async (event, kbPath: string) => {
     const rebuilder = new IndexRebuilder(kbPath)
-    return rebuilder.rebuild()
+    return rebuilder.rebuild((progress) => {
+      event.sender.send('rebuild:progress', progress)
+    })
   })
 
   ipcMain.handle('index:status', (_event, kbPath: string) => {
@@ -430,12 +505,97 @@ export function registerIPCHandlers() {
     return { pages, sources, lastRebuild }
   })
 
+  // Diagnostics — aggregate system info from all storage layers
+  ipcMain.handle('diagnostics:system-info', async (_event, kbPath: string) => {
+    const db = getIndexDB(kbPath)
+    // NOTE: only check already-initialized services — do NOT force lazy init here.
+    // Embedding model loading is CPU-heavy (20-60s) and would block the main process.
+    const vdb = vectorDB // may be null
+    const embedding = embeddingService // may be null
+    const path = require('path')
+    const fs = require('fs')
+
+    // -- SQLite --
+    const indexDir = path.join(kbPath, '.index')
+    const pagesDbPath = path.join(indexDir, 'pages.db')
+    const pagesDbSizeKB = fs.existsSync(pagesDbPath) ? Math.round(fs.statSync(pagesDbPath).size / 1024) : 0
+
+    const sources = db.listSources()
+    const sourceByStatus = { pending: 0, compiling: 0, compiled: 0, failed: 0 }
+    for (const s of sources) {
+      const st = s.status || 'pending'
+      if (st in sourceByStatus) (sourceByStatus as any)[st]++
+    }
+
+    // Count raw/wiki files on disk for comparison
+    const rawDir = path.join(kbPath, 'raw')
+    const rawDiskCount = fs.existsSync(rawDir)
+      ? fs.readdirSync(rawDir).filter((f: string) => !f.startsWith('.')).length
+      : 0
+    const wikiDir = path.join(kbPath, 'wiki')
+    const wikiDiskCount = fs.existsSync(wikiDir)
+      ? fs.readdirSync(wikiDir).filter((f: string) => f.endsWith('.md')).length
+      : 0
+
+    const sqlite = {
+      filePath: pagesDbPath,
+      fileSizeKB: pagesDbSizeKB,
+      wikiDiskCount,
+      pageCount: db.listPages().length,
+      sourceCount: sources.length,
+      rawDiskCount,
+      sourceByStatus,
+      linkCount: db.getAllLinks().length,
+      conflictCount: db.listOpenConflicts().length,
+      settingsCount: Object.keys(db.getAllSettings()).length,
+    }
+
+    // -- LanceDB --
+    const lancedbDir = path.join(indexDir, 'vectors.lancedb')
+    const lancedbSizeKB = dirSizeKB(lancedbDir)
+    const chunkStats = vdb ? await vdb.stats() : { totalChunks: 0, pageChunks: 0, sourceChunks: 0 }
+
+    const lancedb = {
+      dirPath: lancedbDir,
+      totalChunks: chunkStats.totalChunks,
+      pageChunks: chunkStats.pageChunks,
+      sourceChunks: chunkStats.sourceChunks,
+      dirSizeKB: lancedbSizeKB,
+    }
+
+    // -- Embedding --
+    const emb = {
+      model: 'bge-m3',
+      dimension: embedding ? embedding.getDimension() : 0,
+      ready: embedding ? embedding.isReady() : false,
+    }
+
+    // -- Storage / meta --
+    const aiNotesDir = path.join(kbPath, '.ai-notes')
+    const compileLogPath = path.join(aiNotesDir, 'compile-log.json')
+    let compileLogEntries = 0
+    if (fs.existsSync(compileLogPath)) {
+      try { compileLogEntries = Object.keys(JSON.parse(fs.readFileSync(compileLogPath, 'utf-8'))).length } catch {}
+    }
+
+    const storage = {
+      indexDirSizeKB: dirSizeKB(indexDir),
+      compileLogEntries,
+      lastRebuild: db.getSetting('last_rebuild', '从未'),
+      flexSearchBuilt: false, // in-memory only, no way to query without adding state
+    }
+
+    return { sqlite, lancedb, embedding: emb, storage }
+  })
+
   // Semantic compile & QA (v2)
-  ipcMain.handle('llm:compile-v2', async (_event, kbPath: string, rawFilePath: string) => {
+  ipcMain.handle('llm:compile-v2', async (event, kbPath: string, rawFilePath: string) => {
     const db = getIndexDB(kbPath)
     const vdb = await getVectorDB(kbPath)
     const embedding = await getEmbeddingService()
-    return incrementalCompile(rawFilePath, kbPath, embedding, db, vdb)
+    return incrementalCompile(rawFilePath, kbPath, embedding, db, vdb, undefined, (progress) => {
+      event.sender.send('compile:progress', progress)
+    })
   })
 
   ipcMain.handle('llm:qa-v2', async (_event, kbPath: string, question: string) => {

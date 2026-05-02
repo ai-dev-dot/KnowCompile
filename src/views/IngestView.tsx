@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import DropZone from '../components/DropZone'
-import { useIPC } from '../hooks/useIPC'
+import { useIPC, type CompileProgress } from '../hooks/useIPC'
 
-interface Props { kbPath: string }
+interface Props { kbPath: string; active?: boolean }
 
 interface RawFile {
   name: string
@@ -17,18 +17,21 @@ interface CompileStatus {
   compiledAt?: string
 }
 
-export default function IngestView({ kbPath }: Props) {
+export default function IngestView({ kbPath, active }: Props) {
   const [rawFiles, setRawFiles] = useState<RawFile[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [compiling, setCompiling] = useState<string | null>(null)
   const [compileResult, setCompileResult] = useState<string | null>(null)
   const [compileStatuses, setCompileStatuses] = useState<Record<string, CompileStatus>>({})
   const [recompileFile, setRecompileFile] = useState<string | null>(null)
+  const [compileProgress, setCompileProgress] = useState<CompileProgress | null>(null)
+  const cleanupListenerRef = useRef<(() => void) | null>(null)
   const ipc = useIPC()
 
   useEffect(() => {
-    loadAll()
-  }, [kbPath])
+    if (active !== false) loadAll()
+    return () => { cleanupListenerRef.current?.() }
+  }, [kbPath, active])
 
   const loadAll = async () => {
     const files = await ipc.listRawFiles(kbPath)
@@ -65,10 +68,19 @@ export default function IngestView({ kbPath }: Props) {
     setCompiling(filePath)
     setCompileResult(null)
     setRecompileFile(null)
+    setCompileProgress(null)
     const rawName = filePath.replace(/^.*[\\/]/, '')
+
+    // Listen for progress events from main process
+    cleanupListenerRef.current?.()
+    cleanupListenerRef.current = ipc.on('compile:progress', (progress: CompileProgress) => {
+      setCompileProgress(progress)
+    })
 
     try {
       const result = await ipc.compileV2(kbPath, filePath)
+      cleanupListenerRef.current?.()
+      cleanupListenerRef.current = null
       const wikiPages: string[] = []
 
       // LLM may generate multiple pages (split by "# " headers)
@@ -132,8 +144,12 @@ export default function IngestView({ kbPath }: Props) {
 
     if (isCompiling) {
       return (
-        <button disabled className="text-xs text-text-muted opacity-50">
-          编译中...
+        <button disabled className="text-xs text-accent/70 whitespace-nowrap" title={
+          compileProgress
+            ? `步骤 ${compileProgress.step}/5: ${compileProgress.label}${compileProgress.detail ? ' - ' + compileProgress.detail : ''}`
+            : '编译中...'
+        }>
+          {compileProgress ? `${compileProgress.label} (${compileProgress.percent}%)` : '编译中...'}
         </button>
       )
     }
@@ -211,6 +227,21 @@ export default function IngestView({ kbPath }: Props) {
         <DropZone onFilesDrop={handleDrop} />
         {status && (
           <div className="mt-4 p-3 rounded-lg bg-accent/10 text-accent text-sm">{status}</div>
+        )}
+        {compiling && compileProgress && (
+          <div className="mt-4 p-4 rounded-lg bg-gray-800 border border-border">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-text">正在编译 {compiling.replace(/^.*[\\/]/, '')}</span>
+              <span className="text-xs text-text-muted">{compileProgress.percent}%</span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
+              <div className="bg-accent h-2 rounded-full transition-all duration-300" style={{ width: `${compileProgress.percent}%` }} />
+            </div>
+            <p className="text-xs text-text-muted">
+              步骤 {compileProgress.step}/5 — {compileProgress.label}
+              {compileProgress.detail && <span className="text-text-muted/60"> · {compileProgress.detail}</span>}
+            </p>
+          </div>
         )}
         {compileResult && (
           <div className="mt-4 p-3 rounded-lg bg-accent/10 text-accent text-sm">{compileResult}</div>

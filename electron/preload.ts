@@ -18,8 +18,8 @@ const ALLOWED_CHANNELS = new Set([
   'compile:check', 'compile:log', 'compile:validate', 'compile:validate-all', 'compile:iterate',
   // Conflicts
   'conflicts:list', 'conflicts:resolve',
-  // Index
-  'index:rebuild', 'index:status',
+  // Index & Diagnostics
+  'index:rebuild', 'index:status', 'diagnostics:system-info', 'rebuild:progress',
   // Search & Graph
   'search:build', 'search:query', 'graph:data',
   // Export & Backup

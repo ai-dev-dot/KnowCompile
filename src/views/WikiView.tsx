@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import PageList from '../components/PageList'
 import MarkdownRenderer from '../components/MarkdownRenderer'
-import RightPanel from '../components/RightPanel'
 import { useIPC } from '../hooks/useIPC'
 
 interface Props {
@@ -15,7 +14,6 @@ export default function WikiView({ kbPath, active }: Props) {
   const [content, setContent] = useState('')
   const [backlinks, setBacklinks] = useState<string[]>([])
   const [links, setLinks] = useState<string[]>([])
-  const [showPanel, setShowPanel] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<{ name: string }[] | null>(null)
   const ipc = useIPC()
@@ -51,11 +49,17 @@ export default function WikiView({ kbPath, active }: Props) {
   }
 
   const navigateTo = async (pageName: string) => {
-    const found = pages.find(p => p.name === pageName)
+    // Strip trailing annotations like "（待创建）" to get the real page name
+    const cleanName = pageName.replace(/[（(][^)）]*[)）]$/, '').trim()
+    const found = pages.find(p => p.name === cleanName)
     if (found) {
       await loadPage(found)
     }
+    // Silently skip non-existent pages — they haven't been created yet
   }
+
+  // Existing page names for dead-link filtering
+  const existingNames = new Set(pages.map(p => p.name))
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -78,22 +82,56 @@ export default function WikiView({ kbPath, active }: Props) {
           />
         </div>
       </PageList>
-      <main className="flex-1 overflow-y-auto p-8">
+      <main className="flex-1 overflow-y-auto">
         {activePage ? (
-          <MarkdownRenderer content={content} onLinkClick={navigateTo} />
+          <div className="max-w-3xl mx-auto px-8 py-8">
+            <MarkdownRenderer content={content} onLinkClick={navigateTo} />
+
+            {/* Related pages — wiki-style footer */}
+            <div className="mt-12 pt-6 border-t border-border space-y-4">
+              {backlinks.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-text-muted mb-2">链接到此的页面</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {backlinks.map((name) => (
+                      <button
+                        key={name}
+                        onClick={() => navigateTo(name)}
+                        className="px-3 py-1 rounded-full bg-gray-800 text-sm text-link hover:bg-gray-700 hover:underline transition-colors"
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {links.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-text-muted mb-2">本页引用的页面</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {links
+                      .filter(name => existingNames.has(name))
+                      .map((name) => (
+                        <button
+                          key={name}
+                          onClick={() => navigateTo(name)}
+                          className="px-3 py-1 rounded-full bg-gray-800 text-sm text-link hover:bg-gray-700 hover:underline transition-colors"
+                        >
+                          {name}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="h-full flex items-center justify-center">
             <p className="text-text-muted text-lg">选择一个页面开始阅读</p>
           </div>
         )}
       </main>
-      <RightPanel
-        visible={showPanel}
-        backlinks={backlinks}
-        links={links}
-        onNavigate={navigateTo}
-        onClose={() => setShowPanel(false)}
-      />
     </div>
   )
 }

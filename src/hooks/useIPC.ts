@@ -125,8 +125,64 @@ export function useIPC() {
     archiveQA: (kbPath: string, question: string, answer: string) =>
       api.invoke('wiki:archive-qa', kbPath, question, answer) as Promise<{ success: boolean; path?: string }>,
 
+    // Diagnostics
+    getSystemInfo: (kbPath: string) =>
+      api.invoke('diagnostics:system-info', kbPath) as Promise<SystemInfo>,
+
     // Generic invoke for handlers not yet typed
     invoke: (channel: string, ...args: unknown[]) =>
       api.invoke(channel, ...args),
+
+    // Event listeners
+    on: (channel: string, callback: (...args: any[]) => void) =>
+      api.on(channel, callback) as () => void,
+  }
+}
+
+export interface CompileProgress {
+  step: number
+  label: string
+  detail?: string
+  percent: number
+}
+
+export interface RebuildProgress {
+  phase: string
+  label: string
+  current: number
+  total: number
+  percent: number
+}
+
+export interface SystemInfo {
+  sqlite: {
+    filePath: string
+    fileSizeKB: number
+    pageCount: number
+    wikiDiskCount: number
+    sourceCount: number
+    rawDiskCount: number
+    sourceByStatus: { pending: number; compiling: number; compiled: number; failed: number }
+    linkCount: number
+    conflictCount: number
+    settingsCount: number
+  }
+  lancedb: {
+    dirPath: string
+    totalChunks: number
+    pageChunks: number
+    sourceChunks: number
+    dirSizeKB: number
+  }
+  embedding: {
+    model: string
+    dimension: number
+    ready: boolean
+  }
+  storage: {
+    indexDirSizeKB: number
+    compileLogEntries: number
+    lastRebuild: string
+    flexSearchBuilt: boolean
   }
 }

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { useIPC } from '../hooks/useIPC'
+import { useState, useEffect, useRef } from 'react'
+import { useIPC, type RebuildProgress } from '../hooks/useIPC'
 import { LLM_PROVIDERS, findProvider } from '../providers'
 
 interface Props { kbPath: string }
@@ -46,7 +46,9 @@ export default function SettingsView({ kbPath }: Props) {
   const [schemaSaveStatus, setSchemaSaveStatus] = useState<string | null>(null)
   const [indexStatus, setIndexStatus] = useState<{ pages: number; sources: number; lastRebuild: string } | null>(null)
   const [rebuilding, setRebuilding] = useState(false)
+  const [rebuildProgress, setRebuildProgress] = useState<RebuildProgress | null>(null)
   const [rebuildResult, setRebuildResult] = useState<string | null>(null)
+  const cleanupRef = useRef<(() => void) | null>(null)
   const [conflicts, setConflicts] = useState<any[]>([])
   const [conflictResolving, setConflictResolving] = useState<Record<number, boolean>>({})
 
@@ -137,7 +139,14 @@ export default function SettingsView({ kbPath }: Props) {
     if (!window.confirm('确定要重建所有索引吗？这可能需要几分钟时间，期间 Wiki 搜索和问答功能可能受影响。')) return
     setRebuilding(true)
     setRebuildResult(null)
+    setRebuildProgress(null)
+    // Listen for progress events
+    cleanupRef.current?.()
+    cleanupRef.current = ipc.on('rebuild:progress', (p: RebuildProgress) => setRebuildProgress(p))
     const r = await ipc.rebuildIndex(kbPath)
+    cleanupRef.current?.()
+    cleanupRef.current = null
+    setRebuildProgress(null)
     setRebuilding(false)
     if (r.errors.length > 0) {
       setRebuildResult(`完成：${r.pagesIndexed} 页, ${r.chunksIndexed} 块, ${r.sourcesIndexed} 源。错误：${r.errors.join('; ')}`)
@@ -166,7 +175,8 @@ export default function SettingsView({ kbPath }: Props) {
   // -- Render --
 
   return (
-    <div className="flex-1 overflow-y-auto p-8 max-w-2xl">
+    <div className="w-full overflow-y-auto p-8">
+      <div className="max-w-2xl mx-auto">
       <h2 className="text-xl font-semibold text-text mb-8">设置</h2>
 
       {/* Tab bar */}
@@ -429,27 +439,27 @@ export default function SettingsView({ kbPath }: Props) {
 
           {/* Compile Parameters */}
           <section className="mb-8">
-            <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">🔧 编译参数</h3>
+            <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">编译参数</h3>
             <div className="space-y-4">
               <ParamRow
-                label="chunk_size"
-                help="越小检索越精确但索引变大；越大语义越完整但可能漏掉细节。改后需重建索引"
+                label="文本分块大小（字）"
+                help="越小检索越精确但索引变大；越大语义越完整但可能漏掉细节。改后需重建索引。默认 500"
                 value={advancedSettings.chunk_size ?? ''}
                 placeholder="500"
                 onChange={v => updateAdvSetting('chunk_size', v)}
                 labelClass={labelClass} inputClass={inputClass}
               />
               <ParamRow
-                label="compile_similarity_threshold"
-                help="越高越保守（只匹配高度相关页面，可能漏掉）；越低越激进（匹配更多页面，可能误判）"
+                label="候选页面最低相似度"
+                help="越高越保守（只匹配高度相关页面，可能漏掉）；越低越激进（匹配更多页面，可能误判）。默认 0.75"
                 value={advancedSettings.compile_similarity_threshold ?? ''}
                 placeholder="0.75"
                 onChange={v => updateAdvSetting('compile_similarity_threshold', v)}
                 labelClass={labelClass} inputClass={inputClass}
               />
               <ParamRow
-                label="compile_candidate_count"
-                help="越多覆盖面越全但编译耗时和 Token 消耗增加；越少越快但可能漏掉该更新的页面"
+                label="送入 LLM 的候选页面数"
+                help="越多覆盖面越全但编译耗时和 Token 消耗增加；越少越快但可能漏掉该更新的页面。默认 3"
                 value={advancedSettings.compile_candidate_count ?? ''}
                 placeholder="3"
                 onChange={v => updateAdvSetting('compile_candidate_count', v)}
@@ -460,35 +470,35 @@ export default function SettingsView({ kbPath }: Props) {
 
           {/* QA Parameters */}
           <section className="mb-8">
-            <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">💬 问答参数</h3>
+            <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">问答参数</h3>
             <div className="space-y-4">
               <ParamRow
-                label="qa_similarity_threshold"
-                help="越高回答更聚焦但可能缺少相关信息；越低覆盖面更广但可能引入噪音"
+                label="问答检索最低相似度"
+                help="越高回答更聚焦但可能缺少相关信息；越低覆盖面更广但可能引入噪音。默认 0.65"
                 value={advancedSettings.qa_similarity_threshold ?? ''}
                 placeholder="0.65"
                 onChange={v => updateAdvSetting('qa_similarity_threshold', v)}
                 labelClass={labelClass} inputClass={inputClass}
               />
               <ParamRow
-                label="qa_retrieval_count"
-                help="越多召回率越高但检索变慢；越少越快但可能遗漏相关内容"
+                label="初始检索块数"
+                help="越多召回率越高但检索变慢；越少越快但可能遗漏相关内容。默认 30"
                 value={advancedSettings.qa_retrieval_count ?? ''}
                 placeholder="30"
                 onChange={v => updateAdvSetting('qa_retrieval_count', v)}
                 labelClass={labelClass} inputClass={inputClass}
               />
               <ParamRow
-                label="qa_final_context_count"
-                help="越多上下文越丰富但 Token 消耗增加；越少越省 Token 但回答可能不够全面"
+                label="送入 LLM 的最终块数"
+                help="越多上下文越丰富但 Token 消耗增加；越少越省 Token 但回答可能不够全面。默认 8"
                 value={advancedSettings.qa_final_context_count ?? ''}
                 placeholder="8"
                 onChange={v => updateAdvSetting('qa_final_context_count', v)}
                 labelClass={labelClass} inputClass={inputClass}
               />
               <ParamRow
-                label="qa_context_max_tokens"
-                help="受限于 LLM 模型的最大上下文；越大可利用更多信息，但需确保不超过模型限制"
+                label="上下文窗口 Token 上限"
+                help="受限于 LLM 模型的最大上下文；越大可利用更多信息，但需确保不超过模型限制。默认 3000"
                 value={advancedSettings.qa_context_max_tokens ?? ''}
                 placeholder="3000"
                 onChange={v => updateAdvSetting('qa_context_max_tokens', v)}
@@ -580,6 +590,17 @@ export default function SettingsView({ kbPath }: Props) {
             >
               {rebuilding ? '重建中...' : '重建所有索引'}
             </button>
+            {rebuilding && rebuildProgress && (
+              <div className="mt-4 p-4 rounded-lg bg-gray-800 border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-text">{rebuildProgress.label}</span>
+                  <span className="text-xs text-text-muted">{rebuildProgress.current}/{rebuildProgress.total} · {rebuildProgress.percent}%</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div className="bg-accent h-2 rounded-full transition-all duration-300" style={{ width: `${rebuildProgress.percent}%` }} />
+                </div>
+              </div>
+            )}
             {rebuildResult && (
               <div className="mt-3 p-3 rounded-lg bg-accent/10 text-accent text-sm">{rebuildResult}</div>
             )}
@@ -615,6 +636,7 @@ export default function SettingsView({ kbPath }: Props) {
           </section>
         </>
       )}
+      </div>
     </div>
   )
 }

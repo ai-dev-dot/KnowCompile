@@ -207,6 +207,22 @@ export class VectorDB {
     }
   }
 
+  /** Return chunk statistics broken down by type. */
+  async stats(): Promise<{ totalChunks: number; pageChunks: number; sourceChunks: number }> {
+    if (!this.table) {
+      return { totalChunks: 0, pageChunks: 0, sourceChunks: 0 }
+    }
+    try {
+      const t = this.table as any
+      const pageCount: number = await t.countRows("type = 'page'")
+      const sourceCount: number = await t.countRows("type = 'source'")
+      return { totalChunks: pageCount + sourceCount, pageChunks: pageCount, sourceChunks: sourceCount }
+    } catch (err) {
+      console.error('VectorDB.stats error:', err)
+      return { totalChunks: 0, pageChunks: 0, sourceChunks: 0 }
+    }
+  }
+
   /**
    * Close the table and connection, releasing underlying resources.
    * Safe to call multiple times.

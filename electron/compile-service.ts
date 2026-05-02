@@ -177,6 +177,13 @@ function trimContent(text: string, maxLen: number): string {
  * @returns The LLM compile output, the parsed plan, and the list of candidate
  *          page titles found during similarity search.
  */
+export interface CompileProgress {
+  step: number        // 1-5
+  label: string       // Human-readable step description
+  detail?: string     // Optional extra detail
+  percent: number     // 0-100
+}
+
 export async function incrementalCompile(
   rawFilePath: string,
   kbPath: string,
@@ -184,7 +191,13 @@ export async function incrementalCompile(
   db: IndexDB,
   vdb: VectorDB,
   overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
+  onProgress?: (p: CompileProgress) => void,
 ): Promise<CompileResult> {
+  const emit = (step: number, label: string, detail?: string, percent?: number) => {
+    onProgress?.({ step, label, detail, percent: percent ?? Math.round((step / 5) * 100) })
+  }
+  const yield_ = () => new Promise<void>(r => setImmediate(r))
+
   // ------------------------------------------------------------------
   // Read settings from DB (with defaults)
   // ------------------------------------------------------------------
@@ -216,6 +229,8 @@ export async function incrementalCompile(
   // ==================================================================
   // STEP 1 — Vectorize
   // ==================================================================
+  emit(1, '读取原始文件...', undefined, 5)
+
   const { content: rawContent, size: rawSize } = await readRawFile(rawFilePath)
   const contentHash = crypto.createHash('sha256').update(rawContent).digest('hex')
 
@@ -239,6 +254,9 @@ export async function incrementalCompile(
   try {
     // Chunk + embed the raw content.
   const chunks = embedding.chunkText(rawContent, chunkSize)
+  emit(1, '文本分块与向量化', `${chunks.length} 个块，正在嵌入...`, 10)
+  await yield_()
+
   let chunkVectors: number[][] = []
   if (chunks.length > 0) {
     chunkVectors = await embedding.embedTexts(chunks)
@@ -254,12 +272,17 @@ export async function incrementalCompile(
     await vdb.addChunks(chunkInputs)
   }
 
+  emit(1, '向量化完成', `${chunks.length} 个文本块已嵌入`, 20)
+  await yield_()
+
   // ==================================================================
   // STEP 2 — Similarity search
   // ==================================================================
+  emit(2, '语义搜索已有页面', '正在检索相关 Wiki 页面...', 25)
+  await yield_()
 
   // For performance on very large documents, limit the number of chunk
-  // vectors used as queries to 30 (sampled evenly).
+  // query vectors used as queries to 30 (sampled evenly).
   const maxQueryChunks = 30
   let queryVectors = chunkVectors
   if (chunkVectors.length > maxQueryChunks) {
@@ -314,10 +337,14 @@ export async function incrementalCompile(
   }
 
   const candidatePageTitles = candidatePageContents.map(p => p.title)
+  emit(2, '语义搜索完成', `匹配到 ${rankedPages.length} 个候选页面`, 40)
+  await yield_()
 
   // ==================================================================
   // STEP 3 — LLM verification + conflict detection
   // ==================================================================
+  emit(3, 'LLM 生成编译计划', '正在分析新资料与现有知识的关系...', 45)
+  await yield_()
 
   // Build the schema prompt from schema files.
   const schemaContent = loadSchemaPrompt(kbPath)
@@ -400,15 +427,25 @@ export async function incrementalCompile(
     }
   }
 
+  emit(3, '编译计划生成完成', `新建 ${plan.new_pages.length} 页，更新 ${plan.updates.length} 页，发现 ${plan.conflicts.length} 个矛盾`, 60)
+  await yield_()
+
   // ==================================================================
   // STEP 4 — Generate wiki pages via compileNewPages
   // ==================================================================
+  emit(4, 'LLM 生成 Wiki 页面', '正在撰写知识页面内容...', 65)
+  await yield_()
 
   const compileOutput = await compileNewPages(rawContent, rawFileName, existingTitles, kbPath, overrideSettings)
+
+  emit(4, 'Wiki 页面生成完成', undefined, 80)
+  await yield_()
 
   // ==================================================================
   // STEP 5 — Write pages, handle conflicts, update index
   // ==================================================================
+  emit(5, '写入页面与更新索引', '正在保存 Wiki 页面并重建向量索引...', 85)
+  await yield_()
 
   // 5a. Split and write individual pages to disk.
   const generatedPages = splitWikiPages(compileOutput)
@@ -522,6 +559,8 @@ export async function incrementalCompile(
 
   // 5c. Update source status to 'compiled'.
   db.updateSourceStatus(sourcePath, 'compiled', generatedPages.length)
+
+  emit(5, '编译完成', `${generatedPages.length} 个 Wiki 页面已生成`, 100)
 
   return {
     compileOutput,

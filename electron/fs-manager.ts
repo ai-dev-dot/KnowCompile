@@ -79,7 +79,9 @@ export function extractBacklinks(kbPath: string, pageName: string): string[] {
 
   for (const file of fs.readdirSync(wikiDir)) {
     if (!file.endsWith('.md')) continue
-    const content = fs.readFileSync(path.join(wikiDir, file), 'utf-8')
+    const rawContent = fs.readFileSync(path.join(wikiDir, file), 'utf-8')
+    // Skip code blocks so [[links]] inside examples are not counted
+    const content = stripFencedCodeBlocks(rawContent)
     linkPattern.lastIndex = 0
     let match
     while ((match = linkPattern.exec(content)) !== null) {
@@ -93,11 +95,18 @@ export function extractBacklinks(kbPath: string, pageName: string): string[] {
   return backlinks
 }
 
+/** Strip fenced code blocks so [[links]] inside them are not treated as wiki links */
+function stripFencedCodeBlocks(content: string): string {
+  return content.replace(/```[\s\S]*?```/g, '')
+}
+
 export function extractLinks(content: string): string[] {
   const links: string[] = []
   const pattern = /\[\[([^\]]+)\]\]/g
+  // Strip code blocks first so [[...]] inside examples/demos are not extracted
+  const cleaned = stripFencedCodeBlocks(content)
   let match
-  while ((match = pattern.exec(content)) !== null) {
+  while ((match = pattern.exec(cleaned)) !== null) {
     links.push(match[1])
   }
   return links

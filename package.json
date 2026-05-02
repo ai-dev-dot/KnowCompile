@@ -21,6 +21,7 @@
     "@anthropic-ai/sdk": "^0.91.1",
     "@huggingface/transformers": "^4.2.0",
     "@lancedb/lancedb": "^0.27.2",
+    "@tailwindcss/typography": "^0.5.19",
     "@types/better-sqlite3": "^7.6.13",
     "archiver": "^7.0.1",
     "better-sqlite3": "^12.9.0",
