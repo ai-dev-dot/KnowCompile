@@ -25,9 +25,13 @@ export default function WikiView({ kbPath, active }: Props) {
   }, [kbPath, active])
 
   useEffect(() => {
-    if (searchIndexBuilt) return
-    ipc.buildSearchIndex(kbPath).finally(() => setSearchIndexBuilt(true))
-  }, [kbPath])
+    if (!active || searchIndexBuilt) return
+    const t0 = performance.now()
+    ipc.buildSearchIndex(kbPath).finally(() => {
+      setSearchIndexBuilt(true)
+      console.log(`[search-index] built in ${(performance.now() - t0).toFixed(0)} ms`)
+    })
+  }, [kbPath, active])
 
   const handleSearch = async (q: string) => {
     setSearchQuery(q)

@@ -29,6 +29,8 @@ function StatCard({ title, children }: { title: string; children: React.ReactNod
 export default function SystemView({ kbPath, active }: Props) {
   const [info, setInfo] = useState<SystemInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [mainLagSamples, setMainLagSamples] = useState<{ time: number; delay: number }[]>([])
+  const [renderFps, setRenderFps] = useState<{ time: number; fps: number }[]>([])
   const ipc = useIPC()
 
   const load = async () => {
@@ -36,10 +38,22 @@ export default function SystemView({ kbPath, active }: Props) {
       setError(null)
       const data = await ipc.getSystemInfo(kbPath)
       setInfo(data)
+      const lag = await ipc.getMainLagSamples()
+      setMainLagSamples(lag)
     } catch (err) {
       setError(String(err))
     }
   }
+
+  // Poll renderer FPS samples
+  useEffect(() => {
+    if (!active) return
+    const timer = setInterval(() => {
+      const samples = (window as any).__fpsSamples as { time: number; fps: number }[] | undefined
+      if (samples && samples.length > 0) setRenderFps([...samples])
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [active])
 
   useEffect(() => {
     if (active !== false) load()
@@ -96,6 +110,29 @@ export default function SystemView({ kbPath, active }: Props) {
             <StatRow label=".index/ 总大小" value={formatKB(info.storage.indexDirSizeKB)} />
             <StatRow label="编译历史" value={`${info.storage.compileLogEntries} 条`} />
             <StatRow label="上次索引重建" value={info.storage.lastRebuild} />
+          </StatCard>
+
+          <StatCard title="事件循环诊断（实时）">
+            <StatRow
+              label="主进程卡顿事件"
+              value={mainLagSamples.length === 0 ? '无' : `${mainLagSamples.length} 次`}
+            />
+            {mainLagSamples.length > 0 && (
+              <StatRow
+                label="最近主进程阻塞"
+                value={mainLagSamples.slice(-5).map(s => `${s.delay}ms`).join(' · ') || '-'}
+              />
+            )}
+            <StatRow
+              label="渲染进程低帧率事件"
+              value={renderFps.filter(s => s.fps < 30).length === 0 ? '无' : `${renderFps.filter(s => s.fps < 30).length} 次`}
+            />
+            {renderFps.length > 0 && (
+              <StatRow
+                label="当前渲染帧率"
+                value={`${renderFps[renderFps.length - 1].fps} FPS`}
+              />
+            )}
           </StatCard>
         </div>
       </div>

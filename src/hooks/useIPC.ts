@@ -128,6 +128,8 @@ export function useIPC() {
     // Diagnostics
     getSystemInfo: (kbPath: string) =>
       api.invoke('diagnostics:system-info', kbPath) as Promise<SystemInfo>,
+    getMainLagSamples: () =>
+      api.invoke('diagnostics:main-lag') as Promise<{ time: number; delay: number }[]>,
 
     // LLM Logs
     getLLMLogs: (kbPath: string, query?: { since?: string; role?: string; limit?: number }) =>
@@ -142,7 +144,18 @@ export function useIPC() {
     // Event listeners
     on: (channel: string, callback: (...args: any[]) => void) =>
       api.on(channel, callback) as () => void,
+
+    // Preload progress
+    onPreloadProgress: (callback: (p: PreloadProgress) => void) =>
+      api.on('preload:progress', callback) as () => void,
   }
+}
+
+export interface PreloadProgress {
+  step: number
+  label: string
+  detail: string
+  total: number
 }
 
 export interface CompileProgress {

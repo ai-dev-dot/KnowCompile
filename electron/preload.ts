@@ -19,7 +19,7 @@ const ALLOWED_CHANNELS = new Set([
   // Conflicts
   'conflicts:list', 'conflicts:resolve',
   // Index & Diagnostics & Logs
-  'index:rebuild', 'index:status', 'diagnostics:system-info', 'rebuild:progress',
+  'index:rebuild', 'index:status', 'diagnostics:system-info', 'diagnostics:main-lag', 'rebuild:progress',
   'llm-logs:list', 'llm-logs:stats',
   // Search & Graph
   'search:build', 'search:query', 'graph:data',

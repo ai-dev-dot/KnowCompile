@@ -20,47 +20,144 @@ import { SAMPLE_FILES } from './samples'
 import { validateCompileOutput, validateMultiPage } from './compile-validator'
 import { IndexDB } from './index-db'
 import { VectorDB } from './vector-db'
-import { EmbeddingService } from './embedding-service'
 import { IndexRebuilder } from './index-rebuilder'
 import { incrementalCompile } from './compile-service'
 import { semanticQA } from './qa-service'
 import pathModule from 'path'
 import { resolveSafePath } from './path-utils'
 import { loadSchemaPrompt } from './schema-loader'
+import { Worker } from 'worker_threads'
+import type { EmbeddingService } from './embedding-service'
 
 export function registerIPCHandlers() {
-  // Lazy service initialization
+  // Lazy service initialization — using Promise caches to prevent race
+  // conditions when React StrictMode double-mounts and triggers concurrent
+  // preload calls. Without promise caching, two ONNX models are loaded
+  // simultaneously, blocking the event loop for 14+ seconds total.
   let indexDB: IndexDB | null = null
   let vectorDB: VectorDB | null = null
-  let embeddingService: EmbeddingService | null = null
+  let vectorDBPromise: Promise<VectorDB> | null = null
+  let embeddingWorker: Worker | null = null
+  let embeddingWorkerReady = false
+  let embeddingDimension = 0
+  let workerReqId = 0
+  const workerPending = new Map<number, (result: any) => void>()
+
+  // Thin proxy that forwards embedding calls to the worker thread.
+  // Keeps the same surface as EmbeddingService so compile-service / qa-service
+  // work unchanged.
+  const embeddingProxy = {
+    async initialize(onProgress?: (msg: { phase: string; detail: string }) => void): Promise<void> {
+      if (embeddingWorkerReady) return
+      const id = ++workerReqId
+      return new Promise((resolve, reject) => {
+        workerPending.set(id, (result: any) => {
+          if (result.phase) { onProgress?.(result); return } // progress update
+          if (result.ok) {
+            embeddingDimension = result.dimension ?? 0
+            embeddingWorkerReady = true
+            resolve()
+          } else {
+            reject(new Error(result.error ?? 'embedding worker init failed'))
+          }
+        })
+        embeddingWorker!.postMessage({ id, type: 'init' })
+      })
+    },
+
+    async embedQuery(text: string): Promise<number[]> {
+      const id = ++workerReqId
+      return new Promise((resolve, reject) => {
+        workerPending.set(id, (r: any) => r.ok ? resolve(r.vector) : reject(new Error(r.error)))
+        embeddingWorker!.postMessage({ id, type: 'embed_query', text })
+      })
+    },
+
+    async embedTexts(texts: string[]): Promise<number[][]> {
+      const id = ++workerReqId
+      return new Promise((resolve, reject) => {
+        workerPending.set(id, (r: any) => r.ok ? resolve(r.vectors) : reject(new Error(r.error)))
+        embeddingWorker!.postMessage({ id, type: 'embed_texts', texts })
+      })
+    },
+
+    chunkText(text: string, chunkSize = 500): string[] {
+      // Pure JS — runs in-process (no ONNX dependency)
+      const paragraphs = text.split(/\n\s*\n/)
+      if (paragraphs.length <= 1) {
+        const trimmed = text.trim()
+        if (trimmed.length <= chunkSize) return trimmed.length > 0 ? [trimmed] : []
+        return splitBySentences(trimmed, chunkSize)
+      }
+      const chunks: string[] = []
+      let current = ''
+      for (const para of paragraphs) {
+        const trimmed = para.trim()
+        if (trimmed.length === 0) continue
+        if (trimmed.length > chunkSize) {
+          if (current.length > 0) { chunks.push(current); current = '' }
+          chunks.push(...splitBySentences(trimmed, chunkSize))
+          continue
+        }
+        if (current.length > 0 && current.length + 2 + trimmed.length > chunkSize) {
+          chunks.push(current)
+          current = trimmed
+        } else {
+          current = current.length > 0 ? current + '\n\n' + trimmed : trimmed
+        }
+      }
+      if (current.length > 0) chunks.push(current)
+      return chunks
+    },
+
+    getDimension(): number { return embeddingDimension },
+    isReady(): boolean { return embeddingWorkerReady },
+
+    dispose(): void {
+      embeddingWorker?.terminate()
+      embeddingWorker = null
+      embeddingWorkerReady = false
+    },
+  }
+
+  function splitBySentences(text: string, chunkSize: number): string[] {
+    const sentences = text
+      .split(/(?<=[。！？.!?])\s*/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+    if (sentences.length <= 1) return [text.trim()]
+    const chunks: string[] = []
+    let current = ''
+    for (const s of sentences) {
+      if (s.length > chunkSize) {
+        if (current.length > 0) { chunks.push(current); current = '' }
+        for (let i = 0; i < s.length; i += chunkSize) chunks.push(s.slice(i, i + chunkSize).trim())
+        continue
+      }
+      if (current.length > 0 && current.length + 1 + s.length > chunkSize) {
+        chunks.push(current)
+        current = s
+      } else { current = current.length > 0 ? current + ' ' + s : s }
+    }
+    if (current.length > 0) chunks.push(current)
+    return chunks
+  }
 
   function getIndexDB(kbPath: string): IndexDB {
     if (!indexDB) indexDB = new IndexDB(kbPath)
     return indexDB
   }
 
-  async function getVectorDB(kbPath: string): Promise<VectorDB> {
-    if (!vectorDB) {
-      vectorDB = new VectorDB(kbPath)
-      await vectorDB.initialize()
+  function getVectorDB(kbPath: string): Promise<VectorDB> {
+    if (!vectorDBPromise) {
+      vectorDBPromise = (async () => {
+        const vdb = new VectorDB(kbPath)
+        await vdb.initialize()
+        vectorDB = vdb
+        return vdb
+      })()
     }
-    return vectorDB
-  }
-
-  async function getEmbeddingService(): Promise<EmbeddingService> {
-    if (!embeddingService) {
-      const svc = new EmbeddingService()
-      try {
-        await svc.initialize()
-        embeddingService = svc
-      } catch (err) {
-        console.error('Embedding service init failed:', err)
-        // Don't cache broken instance — let next call retry
-        embeddingService = null
-        throw err
-      }
-    }
-    return embeddingService
+    return vectorDBPromise
   }
 
   function dirSizeKB(dirPath: string): number {
@@ -106,15 +203,14 @@ export function registerIPCHandlers() {
   })
 
   // Sequential preload of all heavy services with progress events.
-  // Loading order: SQLite → VectorDB → EmbeddingModel → warmup.
-  // All four steps are sequential and awaited, so the app is fully ready when it enters the UI.
+  // Loading order: SQLite → VectorDB → EmbeddingModel (in worker) → warmup.
   ipcMain.handle('preload:embedding', async (event, kbPath: string) => {
     try {
       const send = (step: number, label: string, detail: string) => {
         event.sender.send('preload:progress', { step, label, detail, total: 4 })
       }
 
-      // Step 1 — SQLite (instant, but ensures WAL open and schema ready)
+      // Step 1 — SQLite
       send(1, 'SQLite 数据库', '正在打开索引数据库...')
       getIndexDB(kbPath)
 
@@ -122,24 +218,51 @@ export function registerIPCHandlers() {
       send(2, '向量数据库', '正在初始化向量索引...')
       await getVectorDB(kbPath)
 
-      // Step 3 — ONNX embedding model (may take a while, system may lag slightly)
-      send(3, '嵌入模型', '正在加载模型，比较耗时，系统可能卡顿...')
-      const emb = await getEmbeddingService()
+      // Create the embedding worker (spawn it early so it loads in parallel)
+      if (!embeddingWorker) {
+        embeddingWorker = new Worker(
+          pathModule.join(__dirname, 'embedding-worker.js'),
+        )
+        embeddingWorker.on('message', (msg: any) => {
+          const resolve = workerPending.get(msg.id)
+          if (resolve) {
+            if (msg.phase) return resolve(msg) // progress update — keep pending
+            workerPending.delete(msg.id)
+            resolve(msg)
+          }
+        })
+        embeddingWorker.on('error', (err) => {
+          console.error('[embedding-worker] error:', err)
+        })
+      }
 
-      // Step 4 — trigger lazy ONNX JIT compilation now, before entering the UI.
-      // Without this, the first embedQuery() call in QA/compile would block the UI.
-      send(4, '嵌入模型预热', '正在进行首次推理编译...')
-      await emb.embedQuery('warmup')
+      // Step 3 — ONNX embedding model (loads in worker thread — no main-thread jank)
+      const skipEmbedding = process.env.SKIP_EMBEDDING === '1'
+      if (skipEmbedding) {
+        send(3, '嵌入模型', '已跳过（SKIP_EMBEDDING=1）')
+      } else {
+        send(3, '嵌入模型', '正在加载模型到 Worker 线程...')
+        await embeddingProxy.initialize((p) => {
+          send(3, '嵌入模型', p.detail)
+        })
+      }
 
-      // All done — send completion event and await it so renderer receives it
+      // Step 4 — warmup (also runs in worker)
+      if (skipEmbedding) {
+        send(4, '嵌入模型预热', '已跳过（SKIP_EMBEDDING=1）')
+      } else {
+        send(4, '嵌入模型预热', 'Worker 线程首次推理编译...')
+        await embeddingProxy.embedQuery('warmup')
+      }
+
+      // All done
       await new Promise<void>(resolve => {
         event.sender.send('preload:progress', { step: 4, label: '嵌入模型预热', detail: '加载完成', total: 4 })
-        // The send is async; give it a tick to flush before resolving
         setImmediate(resolve)
       })
 
       return { success: true }
-    } catch { return { success: false } }
+    } catch (err) { console.error('[preload] failed:', err); return { success: false } }
   })
 
   // File operations
@@ -164,6 +287,23 @@ export function registerIPCHandlers() {
   })
 
   ipcMain.handle('wiki:backlinks', (_event, kbPath: string, pageName: string) => {
+    // Fast path — use SQLite links table (no disk scan)
+    const db = getIndexDB(kbPath)
+    const page = db.getPageByPath(`wiki/${pageName}.md`)
+    if (page?.id) {
+      const allLinks = db.getAllLinks()
+      const backlinkIds = new Set<number>()
+      for (const l of allLinks) {
+        if (l.to_page_id === page.id) backlinkIds.add(l.from_page_id)
+      }
+      const result: string[] = []
+      for (const id of backlinkIds) {
+        const p = db.getPageById(id)
+        if (p) result.push(p.title)
+      }
+      return result
+    }
+    // Fallback — page not yet indexed, scan filesystem
     return extractBacklinks(kbPath, pageName)
   })
 
@@ -354,9 +494,10 @@ export function registerIPCHandlers() {
   })
 
   // Graph data
-  ipcMain.handle('graph:data', (_event, kbPath: string) => {
+  ipcMain.handle('graph:data', async (_event, kbPath: string) => {
     const fs = require('fs')
     const path = require('path')
+    const yield_ = () => new Promise<void>(r => setImmediate(r))
     const wikiDir = path.join(kbPath, 'wiki')
     if (!fs.existsSync(wikiDir)) return { nodes: [], edges: [] }
 
@@ -365,7 +506,8 @@ export function registerIPCHandlers() {
     const linkCount: Record<string, number> = {}
 
     const files = fs.readdirSync(wikiDir).filter((f: string) => f.endsWith('.md'))
-    for (const file of files) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
       const name = file.replace('.md', '')
       const content = fs.readFileSync(path.join(wikiDir, file), 'utf-8')
       for (const target of extractLinks(content)) {
@@ -373,6 +515,7 @@ export function registerIPCHandlers() {
         linkCount[name] = (linkCount[name] || 0) + 1
         linkCount[target] = (linkCount[target] || 0) + 1
       }
+      if (i % 5 === 0) await yield_()
     }
 
     for (const file of files) {
@@ -388,18 +531,23 @@ export function registerIPCHandlers() {
   })
 
   // Search
-  ipcMain.handle('search:build', (_event, kbPath: string) => {
+  ipcMain.handle('search:build', async (_event, kbPath: string) => {
     const fs = require('fs')
     const path = require('path')
+    const yield_ = () => new Promise<void>(r => setImmediate(r))
     const wikiDir = path.join(kbPath, 'wiki')
     if (!fs.existsSync(wikiDir)) return { success: false }
 
-    const pages = fs.readdirSync(wikiDir)
-      .filter((f: string) => f.endsWith('.md'))
-      .map((f: string) => ({
+    const pageFiles = fs.readdirSync(wikiDir).filter((f: string) => f.endsWith('.md'))
+    const pages: { name: string; content: string }[] = []
+    for (let i = 0; i < pageFiles.length; i++) {
+      const f = pageFiles[i]
+      pages.push({
         name: f.replace('.md', ''),
         content: fs.readFileSync(path.join(wikiDir, f), 'utf-8'),
-      }))
+      })
+      if (i % 5 === 0) await yield_()
+    }
 
     buildIndex(kbPath, pages)
     return { success: true, count: pages.length }
@@ -567,7 +715,7 @@ export function registerIPCHandlers() {
     // NOTE: only check already-initialized services — do NOT force lazy init here.
     // Embedding model loading is CPU-heavy (20-60s) and would block the main process.
     const vdb = vectorDB // may be null
-    const embedding = embeddingService // may be null
+    const embedding = embeddingWorkerReady ? embeddingProxy : null
     const path = require('path')
     const fs = require('fs')
 
@@ -648,8 +796,8 @@ export function registerIPCHandlers() {
   ipcMain.handle('llm:compile-v2', async (event, kbPath: string, rawFilePath: string) => {
     const db = getIndexDB(kbPath)
     const vdb = await getVectorDB(kbPath)
-    const embedding = await getEmbeddingService()
-    return incrementalCompile(rawFilePath, kbPath, embedding, db, vdb, undefined, (progress) => {
+    const embedding = embeddingProxy
+    return incrementalCompile(rawFilePath, kbPath, embedding as any as EmbeddingService, db, vdb, undefined, (progress) => {
       event.sender.send('compile:progress', progress)
     })
   })
@@ -657,8 +805,8 @@ export function registerIPCHandlers() {
   ipcMain.handle('llm:qa-v2', async (_event, kbPath: string, question: string) => {
     const db = getIndexDB(kbPath)
     const vdb = await getVectorDB(kbPath)
-    const embedding = await getEmbeddingService()
-    return semanticQA(question, kbPath, embedding, db, vdb)
+    const embedding = embeddingProxy
+    return semanticQA(question, kbPath, embedding as any as EmbeddingService, db, vdb)
   })
 
   // Advanced settings

@@ -1,8 +1,37 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import './env-setup' // must be first — limits ONNX thread pool
+import { app, BrowserWindow, Menu, ipcMain } from 'electron'
 import path from 'path'
 import { registerIPCHandlers } from './ipc-handlers'
 
 let mainWindow: BrowserWindow | null = null
+
+// ---------------------------------------------------------------------------
+// Event-loop lag monitor — detects main-process jank
+// ---------------------------------------------------------------------------
+const lagSamples: { time: number; delay: number }[] = []
+const MAX_LAG_SAMPLES = 200
+let lastLagCheck = process.hrtime.bigint()
+const lagTimer = setInterval(() => {
+  const now = process.hrtime.bigint()
+  const elapsed = Number(now - lastLagCheck) / 1e6 // ms
+  lastLagCheck = now
+  // expected ~100 ms; >500 ms means a significant block worth logging
+  if (elapsed > 500) {
+    const sample = { time: Date.now(), delay: Math.round(elapsed) }
+    lagSamples.push(sample)
+    if (lagSamples.length > MAX_LAG_SAMPLES) lagSamples.shift()
+    console.warn(`[main-lag] event loop blocked for ${elapsed.toFixed(0)} ms`)
+  } else if (elapsed > 130) {
+    const sample = { time: Date.now(), delay: Math.round(elapsed) }
+    lagSamples.push(sample)
+    if (lagSamples.length > MAX_LAG_SAMPLES) lagSamples.shift()
+  }
+}, 100)
+lagTimer.unref() // don't keep the process alive
+
+ipcMain.handle('diagnostics:main-lag', () => {
+  return lagSamples.slice()
+})
 
 function createWindow() {
   mainWindow = new BrowserWindow({

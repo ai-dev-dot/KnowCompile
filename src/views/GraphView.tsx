@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import cytoscape, { Core } from 'cytoscape'
 import { useIPC } from '../hooks/useIPC'
 
-interface Props { kbPath: string }
+interface Props { kbPath: string; active?: boolean }
 
-export default function GraphView({ kbPath }: Props) {
+export default function GraphView({ kbPath, active }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
   const ipc = useIPC()
@@ -80,12 +80,13 @@ export default function GraphView({ kbPath }: Props) {
   }, [kbPath])
 
   useEffect(() => {
+    if (!active) return
     loadGraph()
     return () => {
       cyRef.current?.destroy()
       cyRef.current = null
     }
-  }, [loadGraph])
+  }, [loadGraph, active])
 
   return (
     <div className="flex-1 flex flex-col">

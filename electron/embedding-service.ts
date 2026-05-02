@@ -1,6 +1,11 @@
 import { pipeline, env } from '@huggingface/transformers'
 import type { FeatureExtractionPipeline } from '@huggingface/transformers'
 
+// Block ALL remote access — the model is cached locally.
+// Any network timeout would stall the main-process event loop for 20-60 s.
+env.allowRemoteModels = false
+env.allowLocalModels = true
+
 // Allow overriding the model host via env var (useful for mirrors).
 // Must be set at module scope before any pipeline() call.
 if (process.env.EMBEDDING_REMOTE_HOST) {
