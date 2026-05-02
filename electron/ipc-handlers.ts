@@ -592,9 +592,11 @@ export function registerIPCHandlers() {
       }
     }
 
-    // Initialize tracking manifest
+    // Initialize tracking manifest (don't overwrite if it already exists)
     const manifestPath = path.join(kbPath, '.ai-notes', 'sample-pages.json')
-    fs.writeFileSync(manifestPath, '[]', 'utf-8')
+    if (!fs.existsSync(manifestPath)) {
+      fs.writeFileSync(manifestPath, '[]', 'utf-8')
+    }
 
     return { success: true, count: SAMPLE_FILES.length }
   })
@@ -634,6 +636,22 @@ export function registerIPCHandlers() {
     if (fs.existsSync(manifestPath)) {
       try { pages = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) } catch (err) { console.error('Failed to parse sample manifest:', err); pages = [] }
     }
+
+    // Fallback: if manifest is empty (e.g. pages were compiled before
+    // trackSamplePage existed), find sample-generated pages via compile-log.
+    if (pages.length === 0) {
+      const logPath2 = path.join(kbPath, '.ai-notes', 'compile-log.json')
+      if (fs.existsSync(logPath2)) {
+        try {
+          const log = JSON.parse(fs.readFileSync(logPath2, 'utf-8'))
+          for (const sample of SAMPLE_FILES) {
+            const entry = log[sample.name]
+            if (entry?.pages) pages.push(...entry.pages)
+          }
+        } catch { /* ignore */ }
+      }
+    }
+
     if (fs.existsSync(wikiDir)) {
       for (const pageName of pages) {
         const pagePath = path.join(wikiDir, `${pageName}.md`)
