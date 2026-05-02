@@ -18,14 +18,15 @@ export default function WikiView({ kbPath, active }: Props) {
   const [searchResults, setSearchResults] = useState<{ name: string }[] | null>(null)
   const ipc = useIPC()
 
+  const [searchIndexBuilt, setSearchIndexBuilt] = useState(false)
+
   useEffect(() => {
-    if (active !== false) {
-      ipc.listWikiPages(kbPath).then(setPages)
-    }
+    ipc.listWikiPages(kbPath).then(setPages)
   }, [kbPath, active])
 
   useEffect(() => {
-    ipc.buildSearchIndex(kbPath)
+    if (searchIndexBuilt) return
+    ipc.buildSearchIndex(kbPath).finally(() => setSearchIndexBuilt(true))
   }, [kbPath])
 
   const handleSearch = async (q: string) => {

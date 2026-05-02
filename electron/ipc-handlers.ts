@@ -105,12 +105,39 @@ export function registerIPCHandlers() {
     return result.filePaths[0]
   })
 
-  // Eagerly preload embedding model so first QA/compile is instant
-  ipcMain.handle('preload:embedding', async (_event) => {
+  // Sequential preload of all heavy services with progress events.
+  // Loading order: SQLite → VectorDB → EmbeddingModel → warmup.
+  // All four steps are sequential and awaited, so the app is fully ready when it enters the UI.
+  ipcMain.handle('preload:embedding', async (event, kbPath: string) => {
     try {
-      const svc = await getEmbeddingService()
-      // Warm-up inference — ONNX pipelines lazily compile on first call
-      await svc.embedQuery('warmup')
+      const send = (step: number, label: string, detail: string) => {
+        event.sender.send('preload:progress', { step, label, detail, total: 4 })
+      }
+
+      // Step 1 — SQLite (instant, but ensures WAL open and schema ready)
+      send(1, 'SQLite 数据库', '正在打开索引数据库...')
+      getIndexDB(kbPath)
+
+      // Step 2 — LanceDB vector store
+      send(2, '向量数据库', '正在初始化向量索引...')
+      await getVectorDB(kbPath)
+
+      // Step 3 — ONNX embedding model (may take a while, system may lag slightly)
+      send(3, '嵌入模型', '正在加载模型，比较耗时，系统可能卡顿...')
+      const emb = await getEmbeddingService()
+
+      // Step 4 — trigger lazy ONNX JIT compilation now, before entering the UI.
+      // Without this, the first embedQuery() call in QA/compile would block the UI.
+      send(4, '嵌入模型预热', '正在进行首次推理编译...')
+      await emb.embedQuery('warmup')
+
+      // All done — send completion event and await it so renderer receives it
+      await new Promise<void>(resolve => {
+        event.sender.send('preload:progress', { step: 4, label: '嵌入模型预热', detail: '加载完成', total: 4 })
+        // The send is async; give it a tick to flush before resolving
+        setImmediate(resolve)
+      })
+
       return { success: true }
     } catch { return { success: false } }
   })
