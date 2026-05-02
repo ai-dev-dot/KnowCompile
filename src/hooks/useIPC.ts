@@ -129,6 +129,12 @@ export function useIPC() {
     getSystemInfo: (kbPath: string) =>
       api.invoke('diagnostics:system-info', kbPath) as Promise<SystemInfo>,
 
+    // LLM Logs
+    getLLMLogs: (kbPath: string, query?: { since?: string; role?: string; limit?: number }) =>
+      api.invoke('llm-logs:list', kbPath, query) as Promise<any[]>,
+    getLLMLogStats: (kbPath: string) =>
+      api.invoke('llm-logs:stats', kbPath) as Promise<{ totalCalls: number; totalErrors: number; avgDurationMs: number; callsByRole: Record<string, number> }>,
+
     // Generic invoke for handlers not yet typed
     invoke: (channel: string, ...args: unknown[]) =>
       api.invoke(channel, ...args),

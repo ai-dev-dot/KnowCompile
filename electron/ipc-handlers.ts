@@ -1,5 +1,6 @@
 import { ipcMain, dialog } from 'electron'
 import { initKnowledgeBase, getKBPath, setKBPath, checkSchemaUpdate, updateSchema } from './kb-init'
+import { readLLMLogs, getLLMLogStats } from './llm-logger'
 import {
   listWikiPages,
   listRawFiles,
@@ -48,8 +49,16 @@ export function registerIPCHandlers() {
 
   async function getEmbeddingService(): Promise<EmbeddingService> {
     if (!embeddingService) {
-      embeddingService = new EmbeddingService()
-      await embeddingService.initialize()
+      const svc = new EmbeddingService()
+      try {
+        await svc.initialize()
+        embeddingService = svc
+      } catch (err) {
+        console.error('Embedding service init failed:', err)
+        // Don't cache broken instance — let next call retry
+        embeddingService = null
+        throw err
+      }
     }
     return embeddingService
   }
@@ -96,6 +105,16 @@ export function registerIPCHandlers() {
     return result.filePaths[0]
   })
 
+  // Eagerly preload embedding model so first QA/compile is instant
+  ipcMain.handle('preload:embedding', async (_event) => {
+    try {
+      const svc = await getEmbeddingService()
+      // Warm-up inference — ONNX pipelines lazily compile on first call
+      await svc.embedQuery('warmup')
+      return { success: true }
+    } catch { return { success: false } }
+  })
+
   // File operations
   ipcMain.handle('wiki:list', (_event, kbPath: string) => {
     return listWikiPages(kbPath)
@@ -106,7 +125,9 @@ export function registerIPCHandlers() {
   })
 
   ipcMain.handle('wiki:write', (_event, kbPath: string, subpath: string, content: string) => {
-    writeFile(resolveSafePath(kbPath, subpath), content)
+    // Normalize before persisting — safety net for any write path
+    const { normalizeWikiPage } = require('./wiki-normalizer')
+    writeFile(resolveSafePath(kbPath, subpath), normalizeWikiPage(content))
     return { success: true }
   })
 
@@ -181,16 +202,24 @@ export function registerIPCHandlers() {
   ipcMain.handle('compile:check', (_event, kbPath: string, rawFileName: string) => {
     const fs = require('fs')
     const path = require('path')
+
+    // 1. Check compile-log.json first (fast path)
     const logPath = path.join(kbPath, '.ai-notes', 'compile-log.json')
-    if (!fs.existsSync(logPath)) return { compiled: false }
-    try {
-      const log = JSON.parse(fs.readFileSync(logPath, 'utf-8'))
-      const entry = log[rawFileName]
-      return entry ? { compiled: true, wikiPages: entry.pages, compiledAt: entry.at } : { compiled: false }
-    } catch (err) {
-      console.error('Failed to read compile-log.json:', err)
-      return { compiled: false }
+    if (fs.existsSync(logPath)) {
+      try {
+        const log = JSON.parse(fs.readFileSync(logPath, 'utf-8'))
+        const entry = log[rawFileName]
+        if (entry) return { compiled: true, wikiPages: entry.pages, compiledAt: entry.at }
+      } catch (err) { /* fall through to SQLite check */ }
     }
+
+    // 2. Fall back to SQLite sources table
+    const db = getIndexDB(kbPath)
+    const source = db.getSourceByPath(`raw/${rawFileName}`)
+    if (source && (source.status === 'compiled' || source.last_compiled_at)) {
+      return { compiled: true, compiledAt: source.last_compiled_at || undefined }
+    }
+    return { compiled: false }
   })
 
   ipcMain.handle('compile:log', (_event, kbPath: string, rawFileName: string, wikiPages: string[]) => {
@@ -673,5 +702,14 @@ ${answer}
 `
     fs.writeFileSync(filePath, content, 'utf-8')
     return { success: true, path: `wiki/synthesis/${fileName}` }
+  })
+
+  // LLM interaction logs
+  ipcMain.handle('llm-logs:list', (_event, kbPath: string, query?: { since?: string; role?: string; limit?: number }) => {
+    return readLLMLogs(kbPath, { ...query, role: query?.role as any })
+  })
+
+  ipcMain.handle('llm-logs:stats', (_event, kbPath: string) => {
+    return getLLMLogStats(kbPath)
   })
 }

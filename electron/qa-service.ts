@@ -254,7 +254,7 @@ export async function semanticQA(
   const response = await chat([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userMessage },
-  ], overrideSettings)
+  ], overrideSettings, { kbPath, role: 'qa' })
 
   // -------------------------------------------------------------------
   // Step 6 — Post-process: assemble sources list

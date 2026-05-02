@@ -20,6 +20,9 @@ import { EmbeddingService } from './embedding-service'
 import { compileNewPages, chat } from './llm-service'
 import { distanceToSimilarity } from './vector-utils'
 import { loadSchemaPrompt } from './schema-loader'
+import { normalizeWikiPage } from './wiki-normalizer'
+import { getSettings } from './settings-store'
+import type { LLMConfig } from './settings-store'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
@@ -38,6 +41,7 @@ export interface CompileResult {
   compileOutput: string
   plan: CompilePlan
   candidatePages: string[]
+  reviewFeedback?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +187,77 @@ export interface CompileProgress {
   detail?: string     // Optional extra detail
   percent: number     // 0-100
 }
+
+// ---------------------------------------------------------------------------
+// Review helpers
+// ---------------------------------------------------------------------------
+
+function getLLMSettings() {
+  return getSettings()
+}
+
+function getReviewSettings(): LLMConfig | null {
+  const s = getSettings()
+  // If review_llm is explicitly configured, use it. Otherwise use main llm.
+  if (s.review_llm?.model) {
+    return { ...s.llm, ...s.review_llm }
+  }
+  // No review model configured — default to main llm
+  if (s.llm.model) return s.llm
+  return null
+}
+
+interface ReviewResult {
+  passed: boolean
+  feedback?: string
+}
+
+async function reviewContent(
+  compileOutput: string,
+  rawSummary: string,
+  rawFileName: string,
+  kbPath: string,
+  reviewSettings: LLMConfig,
+): Promise<ReviewResult> {
+  const reviewPrompt = [
+    { role: 'system' as const, content: `你是一个 Wiki 页面内容审查员。你的任务是检查 AI 生成的 Wiki 页面质量，重点关注：
+
+1. **事实准确性**：页面内容是否忠实于原始资料？有没有编造原始资料中不存在的信息？
+2. **完整性**：是否遗漏了原始资料中的重要信息？
+3. **逻辑连贯性**：章节结构是否合理？表述是否清晰无矛盾？
+4. **[[链接]]质量**：内部链接是否指向有实际关联的主题？是否存在乱挂链接的情况？
+5. **格式合规**：YAML frontmatter 是否正确？Markdown 语法是否正确？
+
+输出格式：如果质量合格，回复 "PASS"。如果存在问题，逐条列出具体问题和修复建议。` },
+    { role: 'user' as const, content: [
+      `请审查以下编译任务生成的 Wiki 页面：`,
+      '',
+      `## 原始资料（摘要）`,
+      rawSummary,
+      '',
+      `## 生成的 Wiki 页面`,
+      compileOutput.slice(0, 8000),
+      '',
+      `原始资料文件：${rawFileName}`,
+    ].join('\n') },
+  ]
+
+  try {
+    const result = await chat(reviewPrompt, reviewSettings, { kbPath, role: 'review' })
+    const trimmed = result.trim().toUpperCase()
+    if (trimmed.startsWith('PASS') || trimmed === '通过' || trimmed === '合格') {
+      return { passed: true }
+    }
+    return { passed: false, feedback: result }
+  } catch (err) {
+    // Review failed — don't block the compile
+    return { passed: true }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main compile function
+// ---------------------------------------------------------------------------
 
 export async function incrementalCompile(
   rawFilePath: string,
@@ -405,7 +480,7 @@ export async function incrementalCompile(
 
   let plan: CompilePlan
   try {
-    const planResponse = await chat(planMessages, overrideSettings)
+    const planResponse = await chat(planMessages, overrideSettings, { kbPath, role: 'compile' })
     const parsed = parsePlanJson(planResponse)
     if (parsed) {
       plan = parsed
@@ -436,9 +511,71 @@ export async function incrementalCompile(
   emit(4, 'LLM 生成 Wiki 页面', '正在撰写知识页面内容...', 65)
   await yield_()
 
-  const compileOutput = await compileNewPages(rawContent, rawFileName, existingTitles, kbPath, overrideSettings)
+  let compileOutput = await compileNewPages(rawContent, rawFileName, existingTitles, kbPath, overrideSettings)
 
-  emit(4, 'Wiki 页面生成完成', undefined, 80)
+  emit(4, 'Wiki 页面生成完成', undefined, 75)
+  await yield_()
+
+  // ==================================================================
+  // STEP 4.5 — Content Review (with retry)
+  // ==================================================================
+  let reviewFeedback = ''
+  const settings = getLLMSettings()
+  const reviewEnabled = settings.enable_content_review !== false
+  const reviewSettings = getReviewSettings()
+
+  if (reviewEnabled && reviewSettings) {
+    emit(4, '内容审查', '正在由审查模型评估页面质量...', 78)
+    await yield_()
+
+    const reviewResult = await reviewContent(
+      compileOutput,
+      rawContent.slice(0, 4000),
+      rawFileName,
+      kbPath,
+      reviewSettings,
+    )
+
+    if (reviewResult.passed) {
+      reviewFeedback = '审查通过'
+      emit(4, '审查通过', undefined, 80)
+    } else if (reviewResult.feedback) {
+      // Retry: send review feedback back to the main compile model
+      emit(4, '审查发现问题，重新生成', '正在根据审查意见修改...', 78)
+      await yield_()
+
+      try {
+        const schemaContent = loadSchemaPrompt(kbPath)
+        const retryPrompt = [
+          { role: 'system' as const, content: schemaContent },
+          { role: 'user' as const, content: [
+            '你之前生成的 Wiki 页面经内容审查后发现了以下问题，请逐一修复后重新输出完整的 Wiki 页面：',
+            '',
+            '## 审查意见',
+            reviewResult.feedback,
+            '',
+            '## 上一轮输出',
+            compileOutput,
+            '',
+            '请直接输出修复后的完整 Wiki 页面 Markdown（包含 YAML frontmatter）。',
+          ].join('\n') },
+        ]
+        const retryOutput = await chat(retryPrompt, overrideSettings || settings.llm, { kbPath, role: 'retry' })
+        compileOutput = retryOutput
+        reviewFeedback = reviewResult.feedback
+        emit(4, '重新生成完成', undefined, 80)
+      } catch (err) {
+        // Retry failed — keep original output
+        reviewFeedback = `审查未通过（重试失败）：${reviewResult.feedback}`
+        emit(4, '重试失败，使用原始版本', undefined, 80)
+      }
+    } else {
+      // Review failed but no actionable feedback — keep going
+      reviewFeedback = '审查无法完成，使用原始版本'
+      emit(4, '审查跳过', undefined, 80)
+    }
+  }
+
   await yield_()
 
   // ==================================================================
@@ -454,13 +591,16 @@ export async function incrementalCompile(
     const pagePath = `wiki/${title}.md`
     const fullPath = path.join(kbPath, pagePath)
 
+    // Normalize before persisting — LLM output is non-deterministic
+    const normalized = normalizeWikiPage(content)
+
     // Write page to disk.
     const dir = path.dirname(fullPath)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(fullPath, content, 'utf-8')
+    fs.writeFileSync(fullPath, normalized, 'utf-8')
 
-    // Compute hash.
-    const pageHash = crypto.createHash('sha256').update(content).digest('hex')
+    // Hash computed from normalized content
+    const pageHash = crypto.createHash('sha256').update(normalized).digest('hex')
 
     // Upsert page in SQLite.
     const page = db.upsertPage({
@@ -473,7 +613,7 @@ export async function incrementalCompile(
     // Delete old vector chunks for this page, then re-chunk + re-embed + re-add.
     await vdb.deleteChunks(page.id!, 'page')
 
-    const pageChunks = embedding.chunkText(content, chunkSize)
+    const pageChunks = embedding.chunkText(normalized, chunkSize)
     if (pageChunks.length > 0) {
       const pageVectors = await embedding.embedTexts(pageChunks)
       const pageChunkInputs: ChunkInput[] = pageChunks.map((text, i) => ({
@@ -566,6 +706,7 @@ export async function incrementalCompile(
     compileOutput,
     plan,
     candidatePages: candidatePageTitles,
+    reviewFeedback: reviewFeedback || undefined,
   }
   } catch (err) {
     console.error('incrementalCompile failed:', err)

@@ -138,7 +138,13 @@ export function validateCompileOutput(content: string, pageName: string): Valida
     issues.push({ severity: 'warn', rule: 'page-length', message: `页面有 ${lines} 行，建议不超过 200 行` })
   }
 
-  // 10. Has required template sections based on type
+  // 10. No duplicate frontmatter in body (LLM sometimes leaks metadata to the end)
+  const fmCount = (content.match(/^---\n(\w+:[\s\S])/gm) || []).length
+  if (fmCount > 1) {
+    issues.push({ severity: 'error', rule: 'no-dup-frontmatter', message: `检测到 ${fmCount} 个 YAML frontmatter 块（应只有一个在开头）` })
+  }
+
+  // 11. Has required template sections based on type
   const pageType = fm?.fields?.type
   if (pageType === 'concept') {
     if (!hasSection(content, '定义')) {

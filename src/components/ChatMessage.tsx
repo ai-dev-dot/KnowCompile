@@ -18,10 +18,10 @@ export default function ChatMessage({ role, content, sources, onFeedback, onArch
     <div className={`flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`max-w-[80%] rounded-xl px-4 py-3 ${
         role === 'user'
-          ? 'bg-accent text-gray-950'
+          ? 'bg-accent/30 border border-accent/40 text-text'
           : 'bg-gray-800 text-text'
       }`}>
-        <div className="prose prose-invert text-sm max-w-none whitespace-pre-wrap">
+        <div className={`text-sm max-w-none whitespace-pre-wrap ${role === 'user' ? '' : 'prose prose-invert'}`}>
           {content}
         </div>
         {sources && sources.length > 0 && (

@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 const ALLOWED_CHANNELS = new Set([
   // KB management
-  'kb:init', 'kb:get-path', 'kb:set-path', 'kb:select',
+  'kb:init', 'kb:get-path', 'kb:set-path', 'kb:select', 'preload:embedding',
   // Wiki
   'wiki:list', 'wiki:read', 'wiki:write', 'wiki:delete', 'wiki:backlinks', 'wiki:extract-links',
   // Raw
@@ -18,8 +18,9 @@ const ALLOWED_CHANNELS = new Set([
   'compile:check', 'compile:log', 'compile:validate', 'compile:validate-all', 'compile:iterate',
   // Conflicts
   'conflicts:list', 'conflicts:resolve',
-  // Index & Diagnostics
+  // Index & Diagnostics & Logs
   'index:rebuild', 'index:status', 'diagnostics:system-info', 'rebuild:progress',
+  'llm-logs:list', 'llm-logs:stats',
   // Search & Graph
   'search:build', 'search:query', 'graph:data',
   // Export & Backup

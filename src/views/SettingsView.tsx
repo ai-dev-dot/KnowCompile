@@ -28,6 +28,13 @@ export default function SettingsView({ kbPath }: Props) {
   const [selectedProviderId, setSelectedProviderId] = useState('openai')
   const [selectedModelId, setSelectedModelId] = useState('gpt-4o')
   const [customModel, setCustomModel] = useState('')
+  // Review model
+  const MAIN_MODEL_SENTINEL = '__main__'
+  const [reviewEnabled, setReviewEnabled] = useState(true)
+  const [reviewProviderId, setReviewProviderId] = useState(MAIN_MODEL_SENTINEL)
+  const [reviewModelId, setReviewModelId] = useState('')
+  const [reviewCustomModel, setReviewCustomModel] = useState('')
+  const [reviewApiKey, setReviewApiKey] = useState('')
   const [saved, setSaved] = useState(false)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
   const [samplesLoaded, setSamplesLoaded] = useState(false)
@@ -72,6 +79,26 @@ export default function SettingsView({ kbPath }: Props) {
           setSelectedModelId(prov.models[0].id)
           setCustomModel('')
         }
+        // Review model sync
+        setReviewEnabled(s.enable_content_review !== false)
+        if (s.review_llm?.model) {
+          const rpid = guessProviderId(s.review_llm.baseURL || '', s.review_llm.model, s.review_llm.provider)
+          setReviewProviderId(rpid)
+          const rprov = findProvider(rpid)
+          if (rprov && rprov.models.some(m => m.id === s.review_llm.model)) {
+            setReviewModelId(s.review_llm.model!)
+            setReviewCustomModel('')
+          } else {
+            setReviewModelId(CUSTOM_MODEL)
+            setReviewCustomModel(s.review_llm.model || '')
+          }
+          setReviewApiKey(s.review_llm.apiKey || '')
+        } else {
+          // No explicit review model configured — show "主模型"
+          setReviewProviderId(MAIN_MODEL_SENTINEL)
+          setReviewModelId('')
+          setReviewApiKey('')
+        }
       })
       ipc.checkSamples(kbPath).then(r => setSamplesLoaded(r.loaded))
       ipc.checkSchemaUpdate(kbPath).then(setSchemaUpdate)
@@ -98,6 +125,8 @@ export default function SettingsView({ kbPath }: Props) {
   const handleSaveSettings = async () => {
     const effectiveModel = selectedModelId === CUSTOM_MODEL ? customModel.trim() : selectedModelId
     const prov = findProvider(selectedProviderId)
+    const reviewProv = findProvider(reviewProviderId)
+    const effectiveReviewModel = reviewModelId === CUSTOM_MODEL ? reviewCustomModel.trim() : reviewModelId
     await ipc.saveSettings({
       llm: {
         provider: prov?.useAnthropicSDK ? 'anthropic' : 'openai',
@@ -105,6 +134,13 @@ export default function SettingsView({ kbPath }: Props) {
         baseURL: prov?.useAnthropicSDK ? '' : (settings.llm.baseURL || ''),
         model: effectiveModel,
       },
+      review_llm: reviewEnabled && reviewProviderId !== MAIN_MODEL_SENTINEL ? {
+        provider: reviewProv?.useAnthropicSDK ? 'anthropic' : 'openai',
+        apiKey: reviewApiKey || settings.llm.apiKey,
+        baseURL: reviewProv?.useAnthropicSDK ? '' : (reviewProv?.baseURL || ''),
+        model: effectiveReviewModel,
+      } : undefined,
+      enable_content_review: reviewEnabled,
     })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -336,6 +372,69 @@ export default function SettingsView({ kbPath }: Props) {
                 </div>
               )}
             </div>
+          </section>
+
+          {/* Content Review Model */}
+          <section className="mb-8">
+            <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">内容审查模型</h3>
+            <p className="text-text-muted text-xs mb-4">
+              编译完成后由独立模型审查 Wiki 页面质量（事实准确性、完整性、链接合理性）。
+              建议使用廉价模型以节约成本。关闭后跳过审查步骤。
+            </p>
+
+            {/* Enable toggle */}
+            <div className="flex items-center gap-3 mb-4">
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" checked={reviewEnabled} onChange={(e) => setReviewEnabled(e.target.checked)} className="sr-only peer" />
+                <div className="w-9 h-5 bg-gray-700 peer-checked:bg-accent rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all" />
+              </label>
+              <span className="text-sm text-text">{reviewEnabled ? '已启用' : '已关闭'}</span>
+            </div>
+
+            {reviewEnabled && (
+              <div className="space-y-3">
+                {/* Review provider */}
+                <div>
+                  <label className={labelClass}>审查模型服务商</label>
+                  <select value={reviewProviderId} onChange={(e) => {
+                    const id = e.target.value; setReviewProviderId(id)
+                    if (id === MAIN_MODEL_SENTINEL) { setReviewModelId(''); return }
+                    const p = findProvider(id)
+                    if (p && p.models.length > 0) { setReviewModelId(p.models[0].id); setReviewCustomModel('') }
+                    else { setReviewModelId(CUSTOM_MODEL); setReviewCustomModel('') }
+                  }} className={inputClass}>
+                    <option value={MAIN_MODEL_SENTINEL}>主模型（与编译相同）</option>
+                    {LLM_PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+
+                {/* Review model — only shown when a specific provider is selected */}
+                {reviewProviderId !== MAIN_MODEL_SENTINEL && (
+                <div>
+                  <label className={labelClass}>审查模型</label>
+                  {(() => {
+                    const rp = findProvider(reviewProviderId)
+                    if (rp && rp.models.length > 0) {
+                      return <>
+                        <select value={reviewModelId} onChange={(e) => setReviewModelId(e.target.value)} className={inputClass}>
+                          {rp.models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                          <option value={CUSTOM_MODEL}>其他模型（手动输入）...</option>
+                        </select>
+                        {reviewModelId === CUSTOM_MODEL && <input type="text" value={reviewCustomModel} onChange={(e) => setReviewCustomModel(e.target.value)} placeholder="输入模型名称" className={inputClass + ' mt-2'} autoFocus />}
+                      </>
+                    }
+                    return <input type="text" value={reviewCustomModel} onChange={(e) => setReviewCustomModel(e.target.value)} className={inputClass} placeholder="输入模型名称" />
+                  })()}
+                </div>
+                )}
+
+                {/* Review API Key (optional — uses main if blank) */}
+                <div>
+                  <label className={labelClass}>API Key（可选，留空使用主模型）</label>
+                  <input type="password" value={reviewApiKey} onChange={(e) => setReviewApiKey(e.target.value)} className={inputClass} placeholder="留空则使用上方 API Key" />
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Schema Update */}

@@ -69,7 +69,6 @@ export default function SystemView({ kbPath, active }: Props) {
         <h2 className="text-xl font-semibold text-text mb-6">系统信息</h2>
 
         <div className="space-y-5">
-          {/* SQLite */}
           <StatCard title="SQLite 索引库">
             <StatRow label="数据库文件" value={`pages.db · ${formatKB(info.sqlite.fileSizeKB)} · WAL 模式`} />
             <StatRow label="页面（数据库）" value={`${info.sqlite.pageCount} 条记录`} />
@@ -78,10 +77,8 @@ export default function SystemView({ kbPath, active }: Props) {
             <StatRow label="源文件（数据库）" value={`${info.sqlite.sourceCount} 条记录（待编译 ${info.sqlite.sourceByStatus.pending} · 已编译 ${info.sqlite.sourceByStatus.compiled} · 失败 ${info.sqlite.sourceByStatus.failed}）`} />
             <StatRow label="链接" value={info.sqlite.linkCount} />
             <StatRow label="未解决冲突" value={info.sqlite.conflictCount} />
-            <StatRow label="高级设置项" value={info.sqlite.settingsCount} />
           </StatCard>
 
-          {/* LanceDB */}
           <StatCard title="LanceDB 向量库">
             <StatRow label="数据库目录" value={`vectors.lancedb · ${formatKB(info.lancedb.dirSizeKB)}`} />
             <StatRow label="总块数" value={info.lancedb.totalChunks} />
@@ -89,14 +86,12 @@ export default function SystemView({ kbPath, active }: Props) {
             <StatRow label="源块" value={info.lancedb.sourceChunks} />
           </StatCard>
 
-          {/* Embedding */}
           <StatCard title="嵌入模型">
             <StatRow label="模型" value={info.embedding.model} />
             <StatRow label="向量维度" value={info.embedding.dimension} />
             <StatRow label="状态" value={info.embedding.ready ? '已就绪' : '未加载'} />
           </StatCard>
 
-          {/* Storage */}
           <StatCard title="存储概况">
             <StatRow label=".index/ 总大小" value={formatKB(info.storage.indexDirSizeKB)} />
             <StatRow label="编译历史" value={`${info.storage.compileLogEntries} 条`} />

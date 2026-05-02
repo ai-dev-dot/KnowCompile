@@ -573,3 +573,55 @@ This page has all the required elements and should score well on validation.
     expect(result.overallScore).toBe(0)
   })
 })
+
+describe('Duplicate frontmatter detection', () => {
+  it('detects duplicate frontmatter blocks', () => {
+    const content = [
+      '---',
+      'type: concept',
+      'tags: [AI]',
+      'sources: [test.md]',
+      'updated: 2026-05-01',
+      '---',
+      '',
+      '# Test',
+      '',
+      '> 来源：test.md',
+      '',
+      '## 定义',
+      '',
+      'Some content.',
+      '',
+      '---',
+      'type: concept',
+      'tags: [leaked]',
+      'sources: [test.md]',
+      'updated: 2026-05-01',
+      '---',
+    ].join('\n')
+    const report = validateCompileOutput(content, 'Test')
+    const dupFm = report.issues.find(i => i.rule === 'no-dup-frontmatter')
+    expect(dupFm).toBeTruthy()
+    expect(dupFm!.severity).toBe('error')
+  })
+
+  it('does not flag single frontmatter', () => {
+    const content = [
+      '---',
+      'type: concept',
+      'tags: [AI]',
+      'sources: [test.md]',
+      'updated: 2026-05-01',
+      '---',
+      '',
+      '# Test',
+      '',
+      '> 来源：test.md',
+      '',
+      'Content with --- horizontal rule in body.',
+    ].join('\n')
+    const report = validateCompileOutput(content, 'Single')
+    const dupFm = report.issues.find(i => i.rule === 'no-dup-frontmatter')
+    expect(dupFm).toBeUndefined()
+  })
+})

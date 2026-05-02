@@ -8,16 +8,17 @@ interface Props {
   onLinkClick?: (pageName: string) => void
 }
 
-/** Strip trailing YAML frontmatter block only if it looks like page metadata footer */
-function stripTrailingFrontmatter(md: string): string {
-  const parts = md.split(/\n---\n/)
-  if (parts.length < 2) return md
-  const last = parts[parts.length - 1]
-  // Only strip if the last segment looks like YAML frontmatter (has known metadata keys)
-  if (/^(type|tags|sources|updated|created):/m.test(last.trim())) {
-    return parts.slice(0, -1).join('\n---\n')
-  }
-  return md
+/** Strip leading YAML frontmatter (standard --- ... --- at file start) */
+function stripLeadingFrontmatter(md: string): string {
+  const trimmed = md.trimStart()
+  if (!trimmed.startsWith('---')) return md
+  const afterOpen = trimmed.slice(3)
+  const closeIdx = afterOpen.indexOf('\n---\n')
+  if (closeIdx < 0) return md
+  // Only strip if it looks like YAML (has key: value pairs)
+  const fm = afterOpen.slice(0, closeIdx)
+  if (!/^\w+:[\s\S]/m.test(fm)) return md
+  return afterOpen.slice(closeIdx + 5) // skip "\n---\n"
 }
 
 /** Convert [[page name]] to [page name](#wiki:encoded) for react-markdown linking */
@@ -39,7 +40,7 @@ function convertWikiLinks(md: string): string {
 export default function MarkdownRenderer({ content, onLinkClick }: Props) {
   const processed = useMemo(() => {
     let md = content
-    md = stripTrailingFrontmatter(md)
+    md = stripLeadingFrontmatter(md)
     md = convertWikiLinks(md)
     return md
   }, [content])
