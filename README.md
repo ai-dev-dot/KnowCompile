@@ -106,7 +106,7 @@ raw/ 文件 → 分块 → bge-m3 向量化 → LanceDB 语义搜索已有页面
        → 写入 wiki/ + 更新 SQLite + 重建 LanceDB 页面向量
 ```
 
-1. **向量化** — 读取 raw/ 文件（PDF/MD/TXT），SHA-256 哈希去重，按 500 字符分块，bge-m3 嵌入为 1024 维向量存入 LanceDB（`type='source'`）
+1. **向量化** — 读取 raw/ 文件（PDF/MD/TXT），计算 SHA-256 哈希存入元数据，按 500 字符分块，bge-m3 嵌入为 1024 维向量存入 LanceDB（`type='source'`）
 2. **语义搜索** — 用样本块向量在 LanceDB 中检索相关已有页面，按页面聚合相似度，取 Top-N 候选
 3. **LLM 生成编译计划** — 发送原始摘要 + 候选页面 + schema 规则，生成 JSON CompilePlan（`updates` / `new_pages` / `conflicts` 三个数组）
 4. **LLM 生成页面** — 两步 CoT（分析概念关联 → 按模板输出），严格按 schema 风格生成，含 `[[双向链接]]`
