@@ -19,6 +19,7 @@ import type { ChatMessage } from './llm-service'
 import { distanceToSimilarity } from './vector-utils'
 import { logQAAnalytics, QAStepMetrics } from './qa-analytics'
 import { search as keywordSearch } from './search-indexer'
+import { rewriteQuery } from './query-rewriter'
 import fs from 'fs'
 import path from 'path'
 
@@ -116,9 +117,11 @@ export async function buildContext(
     sourceCount: 0,
   }
 
-  // Step 1 — Embed
+  // Step 1 — Preprocess: rewrite query, then embed expanded form
   const t1 = performance.now()
-  const questionVec = await embedding.embedQuery(question)
+  const rewritten = rewriteQuery(question)
+  // Embed the expanded query (original + synonym phrases) for richer semantics
+  const questionVec = await embedding.embedQuery(rewritten.expanded)
   m.embeddingMs = Math.round(performance.now() - t1)
   m.embeddingDim = questionVec.length
 
@@ -127,9 +130,14 @@ export async function buildContext(
   m.retrievalCount = getSettingNum(db, 'qa_retrieval_count', 30)
   const enableHybrid = getSettingNum(db, 'qa_hybrid_search', 1) === 1
 
+  // Keyword search augmented with extracted keywords for better recall
+  const kwQuery = rewritten.keywords.length > 0
+    ? `${question} ${rewritten.keywords.join(' ')}`
+    : question
+
   const [rawResults, kwResults] = await Promise.all([
     vdb.search(questionVec, { type: 'page', topK: m.retrievalCount }),
-    enableHybrid ? Promise.resolve(keywordSearch(kbPath, question)) : Promise.resolve([] as { name: string }[]),
+    enableHybrid ? Promise.resolve(keywordSearch(kbPath, kwQuery)) : Promise.resolve([] as { name: string }[]),
   ])
   m.searchMs = Math.round(performance.now() - t2)
   m.rawResultCount = rawResults.length
