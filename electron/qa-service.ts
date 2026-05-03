@@ -20,6 +20,8 @@ import { distanceToSimilarity } from './vector-utils'
 import { logQAAnalytics, QAStepMetrics } from './qa-analytics'
 import { search as keywordSearch } from './search-indexer'
 import { rewriteQuery } from './query-rewriter'
+import { logGap } from './gap-store'
+import { listConversations } from './conversation-store'
 import fs from 'fs'
 import path from 'path'
 
@@ -211,6 +213,29 @@ export async function buildContext(
     }
   }
 
+  // Build feedback scores: aggregate per source page title
+  const feedbackScores = new Map<string, number>()
+  try {
+    const convs = listConversations(kbPath)
+    const pageStats = new Map<string, { helpful: number; inaccurate: number }>()
+    for (const conv of convs) {
+      for (const msg of conv.messages) {
+        if (msg.role === 'assistant' && msg.sources && msg.feedback) {
+          for (const src of msg.sources) {
+            const s = pageStats.get(src.title) || { helpful: 0, inaccurate: 0 }
+            if (msg.feedback === 'helpful') s.helpful++
+            else if (msg.feedback === 'inaccurate') s.inaccurate++
+            pageStats.set(src.title, s)
+          }
+        }
+      }
+    }
+    for (const [title, stats] of pageStats) {
+      if (stats.helpful >= 3) feedbackScores.set(title, 1.3)
+      else if (stats.inaccurate >= 1) feedbackScores.set(title, 0.7)
+    }
+  } catch { /* feedback aggregation is best-effort */ }
+
   const weighted: WeightedChunk[] = []
   for (const [, chunks] of perPage) {
     for (const item of chunks) {
@@ -240,6 +265,12 @@ export async function buildContext(
       const kwScore = kwRanks.get(title)
       if (kwScore) {
         weight += kwScore * 2.0 // RRF keyword boost factor
+      }
+
+      // Feedback-driven: apply source page trust score
+      const fbScore = feedbackScores.get(title)
+      if (fbScore) {
+        weight *= fbScore
       }
 
       const pageFilePath = page ? path.join(kbPath, page.path) : ''
@@ -398,6 +429,11 @@ export async function semanticQA(
 
     const { cleanAnswer, suggestions } = parseSuggestions(response)
 
+    // Knowledge gap detection: if KB couldn't answer, log the gap
+    if (ctx.contextText === '' || /(未找到|无法回答|未提供|不相关).*信息/i.test(cleanAnswer)) {
+      logGap(kbPath, question)
+    }
+
     // Optional: content review for answer quality
     let finalAnswer = cleanAnswer
     const reviewEnabled = getSettingNum(db, 'qa_review_enabled', 0) === 1
@@ -535,13 +571,18 @@ export async function* semanticQAStream(
     m.llmMs = Math.round(performance.now() - t5)
     m.totalMs = Math.round(performance.now() - t0)
 
-    // Parse suggestions from the final accumulated response
+    // Parse suggestions + detect gaps from the final accumulated response
     let cleanAnswer = accumulated
     let suggestions: string[] = []
     if (accumulated) {
       const parsed = parseSuggestions(accumulated)
       cleanAnswer = parsed.cleanAnswer
       suggestions = parsed.suggestions
+    }
+
+    // Knowledge gap detection
+    if (ctx.contextText === '' || /(未找到|无法回答|未提供|不相关).*信息/i.test(cleanAnswer)) {
+      logGap(kbPath, question)
     }
 
     // Optional: content review

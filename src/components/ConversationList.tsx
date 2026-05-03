@@ -14,7 +14,7 @@ interface Props {
 
 export default function ConversationList({ conversations, activeId, onSelect, onCreate, onDelete }: Props) {
   return (
-    <div className="w-60 bg-gray-900 border-r border-border flex flex-col h-full">
+    <div className="flex-1 overflow-y-auto">
       <div className="p-3">
         <button
           onClick={onCreate}

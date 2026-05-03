@@ -18,11 +18,12 @@ interface Props {
   feedbackState?: 'helpful' | 'inaccurate' | 'more_detail' | null
   onArchive?: () => void
   archived?: boolean
+  suggestArchive?: boolean
   /** When true, show a "已停止生成" marker at the end. */
   partial?: boolean
 }
 
-export default function ChatMessage({ role, content, thinking, suggestions, onSuggestionClick, sources, msgIndex, onFeedback, feedbackState, onArchive, archived, partial }: Props) {
+export default function ChatMessage({ role, content, thinking, suggestions, onSuggestionClick, sources, msgIndex, onFeedback, feedbackState, onArchive, archived, suggestArchive, partial }: Props) {
   return (
     <div className={`flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`max-w-[80%] rounded-xl px-4 py-3 ${
@@ -124,13 +125,15 @@ export default function ChatMessage({ role, content, thinking, suggestions, onSu
               <button
                 onClick={onArchive}
                 disabled={archived}
-                className={`text-xs px-2 py-1 rounded ml-auto transition-colors ${
+                className={`text-xs px-2 py-1 rounded ml-auto transition-all ${
                   archived
                     ? 'bg-gray-700 text-text-muted cursor-not-allowed'
-                    : 'bg-accent/20 text-accent hover:bg-accent/30'
+                    : suggestArchive
+                      ? 'bg-accent/30 text-accent hover:bg-accent/40 animate-pulse'
+                      : 'bg-accent/20 text-accent hover:bg-accent/30'
                 }`}
               >
-                {archived ? '已归档' : '归档到 Wiki'}
+                {archived ? '已归档' : suggestArchive ? '建议归档' : '归档到 Wiki'}
               </button>
             )}
           </div>

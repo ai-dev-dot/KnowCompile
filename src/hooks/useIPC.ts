@@ -131,6 +131,12 @@ export function useIPC() {
     deleteConversation: (kbPath: string, convId: string) =>
       api.invoke('conv:delete', kbPath, convId) as Promise<{ success: boolean }>,
 
+    // Knowledge gaps
+    listGaps: (kbPath: string) =>
+      api.invoke('gaps:list', kbPath) as Promise<any[]>,
+    deleteGap: (kbPath: string, gapId: string) =>
+      api.invoke('gaps:delete', kbPath, gapId) as Promise<{ success: boolean }>,
+
     // Advanced settings
     getAdvancedSettings: (kbPath: string) =>
       api.invoke('settings:get-advanced', kbPath) as Promise<Record<string, string>>,

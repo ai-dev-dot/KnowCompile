@@ -29,6 +29,7 @@ import {
   createConversation, addMessage, getConversation, listConversations,
   deleteConversation, getConversationHistory, updateFeedback,
 } from './conversation-store'
+import { listGaps, deleteGap } from './gap-store'
 import pathModule from 'path'
 import { resolveSafePath } from './path-utils'
 import { loadSchemaPrompt } from './schema-loader'
@@ -1052,5 +1053,17 @@ ${answer}
 
   ipcMain.handle('conv:delete', (_event, kbPath: string, convId: string) => {
     return { success: deleteConversation(kbPath, convId) }
+  })
+
+  // -----------------------------------------------------------------------
+  // Knowledge gaps (v0.2.0)
+  // -----------------------------------------------------------------------
+
+  ipcMain.handle('gaps:list', (_event, kbPath: string) => {
+    return listGaps(kbPath)
+  })
+
+  ipcMain.handle('gaps:delete', (_event, kbPath: string, gapId: string) => {
+    return { success: deleteGap(kbPath, gapId) }
   })
 }

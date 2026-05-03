@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import ChatMessage from '../components/ChatMessage'
 import ConversationList from '../components/ConversationList'
+import GapPanel from '../components/GapPanel'
+import GrowthSummary from '../components/GrowthSummary'
 import { useIPC } from '../hooks/useIPC'
 
 interface Source {
@@ -36,7 +38,8 @@ export default function QAView({ kbPath }: Props) {
   const [streaming, setStreaming] = useState(false)
   const [streamingToken, setStreamingToken] = useState('')
   const [streamingThinking, setStreamingThinking] = useState('')
-  const [streamingError, setStreamingError] = useState<string | null>(null)
+  const [gaps, setGaps] = useState<any[]>([])
+  const [showGaps, setShowGaps] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const ipc = useIPC()
 
@@ -46,12 +49,13 @@ export default function QAView({ kbPath }: Props) {
   const abortRef = useRef<AbortController | null>(null)
   const requestIdRef = useRef('')
 
-  // Load conversations on mount
+  // Load conversations + gaps on mount
   useEffect(() => {
     ipc.listConversations(kbPath).then(list => {
       setConversations(list)
       if (list.length > 0) selectConversation(list[0].id)
     })
+    ipc.listGaps(kbPath).then(setGaps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kbPath])
 
@@ -173,7 +177,8 @@ export default function QAView({ kbPath }: Props) {
           suggestions: data.suggestions,
           sources: data.sources || [],
         }])
-        // Refresh conversation list (title may have updated)
+        // Refresh gaps + conversation list
+        ipc.listGaps(kbPath).then(setGaps)
         ipc.listConversations(kbPath).then(setConversations)
       }
       /* streamingSources removed */
@@ -254,15 +259,35 @@ export default function QAView({ kbPath }: Props) {
 
   return (
     <div className="flex-1 flex">
-      <ConversationList
-        conversations={conversations}
-        activeId={activeConvId}
-        onSelect={selectConversation}
-        onCreate={handleCreateConv}
-        onDelete={handleDeleteConv}
-      />
+      <div className="flex flex-col w-60 bg-gray-900 border-r border-border">
+        <ConversationList
+          conversations={conversations}
+          activeId={activeConvId}
+          onSelect={selectConversation}
+          onCreate={handleCreateConv}
+          onDelete={handleDeleteConv}
+        />
+        <div className="border-t border-border p-2">
+          <GapPanel
+            gaps={gaps}
+            onDelete={async (id) => {
+              await ipc.deleteGap(kbPath, id)
+              setGaps(prev => prev.filter(g => g.id !== id))
+            }}
+            onJumpToIngest={() => {
+              // Switch to ingest view
+              window.dispatchEvent(new CustomEvent('navigate', { detail: 'ingest' }))
+            }}
+          />
+        </div>
+      </div>
 
       <div className="flex-1 flex flex-col">
+        <GrowthSummary
+          gapCount={gaps.filter(g => !g.resolved).length}
+          archiveCount={messages.filter(m => m.archived).length}
+          feedbackCount={messages.filter(m => m.feedback).length}
+        />
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-6">
           {messages.length === 0 && !streaming ? (
             <div className="h-full flex items-center justify-center">
@@ -274,23 +299,30 @@ export default function QAView({ kbPath }: Props) {
             </div>
           ) : (
             <>
-              {messages.map((msg, i) => (
-                <ChatMessage
-                  key={i}
-                  role={msg.role}
-                  content={msg.content}
-                  thinking={msg.thinking}
-                  suggestions={msg.suggestions}
-                  onSuggestionClick={(q) => { setInput(q); /* will auto-focus input */ }}
-                  sources={msg.sources}
-                  msgIndex={i}
-                  archived={msg.archived}
-                  feedbackState={msg.feedback || null}
-                  partial={msg.partial}
-                  onFeedback={msg.role === 'assistant' ? (type) => handleFeedback(i, type) : undefined}
-                  onArchive={msg.role === 'assistant' ? () => handleArchive(i) : undefined}
-                />
-              ))}
+              {messages.map((msg, i) => {
+                const suggestArchive = msg.role === 'assistant' && !msg.archived
+                  && msg.content.length > 200
+                  && (msg.sources || []).length > 0
+                  && !/(未找到|无法回答|未提供)/i.test(msg.content)
+                return (
+                  <ChatMessage
+                    key={i}
+                    role={msg.role}
+                    content={msg.content}
+                    thinking={msg.thinking}
+                    suggestions={msg.suggestions}
+                    onSuggestionClick={(q) => { setInput(q) }}
+                    sources={msg.sources}
+                    msgIndex={i}
+                    archived={msg.archived}
+                    suggestArchive={suggestArchive}
+                    feedbackState={msg.feedback || null}
+                    partial={msg.partial}
+                    onFeedback={msg.role === 'assistant' ? (type) => handleFeedback(i, type) : undefined}
+                    onArchive={msg.role === 'assistant' ? () => handleArchive(i) : undefined}
+                  />
+                )
+              })}
             </>
           )}
 
