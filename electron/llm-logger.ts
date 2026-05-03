@@ -24,6 +24,9 @@ export interface LLMLogEntry {
   error?: string
   reviewPassed?: boolean  // for review role
   reviewFeedback?: string // for review role
+  // Phase 1: user feedback on QA answers
+  feedback?: 'helpful' | 'inaccurate' | 'more_detail'
+  feedbackAt?: string
 }
 
 export function logLLMInteraction(kbPath: string, entry: LLMLogEntry): void {

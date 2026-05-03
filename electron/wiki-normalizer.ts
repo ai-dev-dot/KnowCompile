@@ -10,6 +10,7 @@
  * Best practice: never trust LLM output directly. Always validate and
  * normalize before persisting.
  */
+import { stripThinking } from './utils'
 
 /**
  * Normalize a wiki page before writing to disk.
@@ -19,7 +20,7 @@ export function normalizeWikiPage(content: string): string {
   let out = content
 
   // 1. Strip <think>...</think> reasoning tags (some models leak these)
-  out = out.replace(/<think>[\s\S]*?<\/think>/gi, '')
+  out = stripThinking(out)
 
   // 2. Strip ``` fenced code block wrapping (LLMs sometimes wrap the whole page)
   out = out.replace(/^```(?:markdown|md|yaml)?\s*\n/i, '')

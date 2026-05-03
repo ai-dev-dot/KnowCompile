@@ -18,6 +18,7 @@ import { VectorDB } from './vector-db'
 import type { ChunkInput, SearchResult } from './vector-db'
 import { EmbeddingService } from './embedding-service'
 import { compileNewPages, chat } from './llm-service'
+import { stripThinking } from './utils'
 import { distanceToSimilarity } from './vector-utils'
 import { loadSchemaPrompt } from './schema-loader'
 import { normalizeWikiPage } from './wiki-normalizer'
@@ -119,7 +120,7 @@ export function splitWikiPages(output: string): { title: string; content: string
  */
 export function parsePlanJson(text: string): CompilePlan | null {
   // Strip thinking tags that may have leaked through.
-  const cleanText = text.replace(/<\s*think\s*>[\s\S]*?<\/\s*think\s*>/gi, '').trim()
+  const cleanText = stripThinking(text)
 
   // Strategy 1: look for a fenced JSON block.
   const fenceMatch = cleanText.match(/```(?:json)?\s*([\s\S]*?)\s*```/)

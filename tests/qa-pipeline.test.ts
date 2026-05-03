@@ -222,4 +222,35 @@ describe('QA Pipeline (semanticQA)', () => {
     expect(result.answer).toBeTruthy()
     expect(/<\s*think\s*>/i.test(result.answer)).toBe(false)
   }, 120000)
+
+  it('7. deduplicates sources from the same page', async () => {
+    const result = await semanticQA('机器学习的类型有哪些？', tmpDir, embedding, db, vdb, settings)
+
+    expect(result.sources.length).toBeGreaterThan(0)
+    // No duplicate (title, chunk_index) pairs
+    const keys = result.sources.map(s => `${s.title}|${s.chunk_index}`)
+    expect(new Set(keys).size).toBe(keys.length)
+  }, 120000)
+
+  it('8. returns error-like response for out-of-scope question', async () => {
+    const result = await semanticQA('今天北京的天气怎么样？', tmpDir, embedding, db, vdb, settings)
+
+    expect(result.answer).toBeTruthy()
+    // Should indicate no relevant info found (not hallucinate weather)
+    const answer = result.answer
+    expect(
+      answer.includes('未找到') || answer.includes('没有') || answer.includes('无法') || answer.includes('不相关')
+    ).toBe(true)
+  }, 120000)
+
+  it('9. sources are ordered by similarity descending', async () => {
+    const result = await semanticQA('监督学习是什么？', tmpDir, embedding, db, vdb, settings)
+
+    if (result.sources.length >= 2) {
+      for (let i = 1; i < result.sources.length; i++) {
+        // Sources should be in descending similarity order
+        expect(result.sources[i - 1].similarity).toBeGreaterThanOrEqual(result.sources[i].similarity)
+      }
+    }
+  }, 120000)
 })

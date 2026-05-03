@@ -5,22 +5,26 @@ import path from 'path'
 import { getSettings } from './settings-store'
 import { loadSchemaPrompt } from './schema-loader'
 import { logLLMInteraction, type LLMLogEntry } from './llm-logger'
+import { stripThinking } from './utils'
 
-interface ChatMessage {
+export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
 }
 
-function stripThinking(text: string): string {
-  return text.replace(/<\s*think\s*>[\s\S]*?<\/\s*think\s*>/gi, '').trim()
+interface RunLLMParams {
+  messages: ChatMessage[]
+  overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string }
+  logInfo?: { kbPath: string; role: LLMLogEntry['role'] }
+  signal?: AbortSignal
 }
 
-export async function chat(
-  messages: ChatMessage[],
-  overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
-  logInfo?: { kbPath: string; role: LLMLogEntry['role'] },
-): Promise<string> {
-  const settings = overrideSettings || getSettings().llm
+// ---------------------------------------------------------------------------
+// Internal: shared LLM invocation — handles both providers, logging, errors
+// ---------------------------------------------------------------------------
+
+async function runLLM(params: RunLLMParams): Promise<string> {
+  const settings = params.overrideSettings || getSettings().llm
   const startTime = Date.now()
   let response = ''
   let success = false
@@ -29,11 +33,11 @@ export async function chat(
   try {
     if (settings.provider === 'anthropic') {
       const client = new Anthropic({ apiKey: settings.apiKey })
-      const systemMsg = messages
+      const systemMsg = params.messages
         .filter(m => m.role === 'system')
         .map(m => m.content)
         .join('\n')
-      const otherMsgs = messages.filter(m => m.role !== 'system')
+      const otherMsgs = params.messages.filter(m => m.role !== 'system')
       const resp = await client.messages.create({
         model: settings.model,
         max_tokens: 4096,
@@ -50,35 +54,37 @@ export async function chat(
           .join('\n')
       )
     } else {
-      // OpenAI / custom (MiniMax, DeepSeek, Qwen, etc.)
       const client = new OpenAI({
         apiKey: settings.apiKey,
         baseURL: settings.baseURL || undefined,
       })
       const resp = await client.chat.completions.create({
         model: settings.model,
-        messages,
+        messages: params.messages,
         temperature: 0.3,
       })
       response = stripThinking(resp.choices[0]?.message?.content || '')
     }
     success = true
   } catch (err: any) {
-    errorMsg = err?.message || String(err)
+    if (err?.name === 'AbortError' || params.signal?.aborted) {
+      errorMsg = 'Request cancelled'
+    } else {
+      errorMsg = err?.message || String(err)
+    }
     response = ''
   }
 
-  // Log the interaction
-  if (logInfo?.kbPath) {
-    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
-    logLLMInteraction(logInfo.kbPath, {
+  if (params.logInfo?.kbPath) {
+    const lastUserMsg = [...params.messages].reverse().find(m => m.role === 'user')
+    logLLMInteraction(params.logInfo.kbPath, {
       timestamp: new Date().toISOString(),
       model: settings.model,
       provider: settings.provider,
-      role: logInfo.role,
+      role: params.logInfo.role,
       promptSummary: (lastUserMsg?.content || '').slice(0, 500),
       responseSummary: response.slice(0, 500),
-      promptLen: messages.reduce((sum, m) => sum + m.content.length, 0),
+      promptLen: params.messages.reduce((sum, m) => sum + m.content.length, 0),
       responseLen: response.length,
       durationMs: Date.now() - startTime,
       success,
@@ -89,6 +95,129 @@ export async function chat(
   if (!success) throw new Error(errorMsg || 'LLM call failed')
   return response
 }
+
+// ---------------------------------------------------------------------------
+// Public: non-streaming chat (backward-compatible wrapper)
+// ---------------------------------------------------------------------------
+
+export async function chat(
+  messages: ChatMessage[],
+  overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
+  logInfo?: { kbPath: string; role: LLMLogEntry['role'] },
+): Promise<string> {
+  return runLLM({ messages, overrideSettings, logInfo })
+}
+
+// ---------------------------------------------------------------------------
+// Public: streaming chat — yields tokens as they arrive from the LLM
+// ---------------------------------------------------------------------------
+
+export interface StreamToken {
+  /** Incremental text token, null signals stream completion. */
+  token: string | null
+  /** Accumulated full response so far (for partial display fallback). */
+  accumulated: string
+}
+
+export async function* chatStream(
+  messages: ChatMessage[],
+  overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
+  logInfo?: { kbPath: string; role: LLMLogEntry['role'] },
+  signal?: AbortSignal,
+): AsyncGenerator<StreamToken, void, undefined> {
+  const settings = overrideSettings || getSettings().llm
+  const startTime = Date.now()
+  let accumulated = ''
+  let success = false
+  let errorMsg: string | undefined
+
+  try {
+    if (settings.provider === 'anthropic') {
+      const client = new Anthropic({ apiKey: settings.apiKey })
+      const systemMsg = messages
+        .filter(m => m.role === 'system')
+        .map(m => m.content)
+        .join('\n')
+      const otherMsgs = messages.filter(m => m.role !== 'system')
+      const stream = await client.messages.create({
+        model: settings.model,
+        max_tokens: 4096,
+        system: systemMsg || undefined,
+        messages: otherMsgs.map(m => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        })),
+        stream: true,
+      })
+
+      for await (const event of stream) {
+        if (signal?.aborted) break
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          const chunk = stripThinking(event.delta.text)
+          if (chunk) {
+            accumulated += chunk
+            yield { token: chunk, accumulated }
+          }
+        }
+      }
+    } else {
+      const client = new OpenAI({
+        apiKey: settings.apiKey,
+        baseURL: settings.baseURL || undefined,
+      })
+      const stream = await client.chat.completions.create({
+        model: settings.model,
+        messages,
+        temperature: 0.3,
+        stream: true,
+      })
+
+      for await (const chunk of stream) {
+        if (signal?.aborted) break
+        const delta = chunk.choices[0]?.delta?.content
+        if (delta) {
+          // Some OpenAI-compatible providers leak think tags in chunks
+          const cleaned = stripThinking(delta)
+          if (cleaned) {
+            accumulated += cleaned
+            yield { token: cleaned, accumulated }
+          }
+        }
+      }
+    }
+    success = true
+  } catch (err: any) {
+    if (err?.name === 'AbortError' || signal?.aborted) {
+      errorMsg = 'Request cancelled'
+    } else {
+      errorMsg = err?.message || String(err)
+    }
+  }
+
+  // Log the full interaction
+  if (logInfo?.kbPath) {
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
+    logLLMInteraction(logInfo.kbPath, {
+      timestamp: new Date().toISOString(),
+      model: settings.model,
+      provider: settings.provider,
+      role: logInfo.role,
+      promptSummary: (lastUserMsg?.content || '').slice(0, 500),
+      responseSummary: accumulated.slice(0, 500),
+      promptLen: messages.reduce((sum, m) => sum + m.content.length, 0),
+      responseLen: accumulated.length,
+      durationMs: Date.now() - startTime,
+      success,
+      error: errorMsg,
+    })
+  }
+
+  if (!success) throw new Error(errorMsg || 'LLM stream failed')
+}
+
+// ---------------------------------------------------------------------------
+// Connection test
+// ---------------------------------------------------------------------------
 
 export async function testConnection(settings: {
   provider: string
@@ -125,6 +254,10 @@ export async function testConnection(settings: {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Compile pipeline (unchanged — delegates to chat())
+// ---------------------------------------------------------------------------
+
 export async function compileNewPages(
   rawContent: string,
   rawFileName: string,
@@ -138,7 +271,6 @@ export async function compileNewPages(
     ? `\n## 已有 Wiki 页面\n${existingWikiTitles.map(t => `- ${t}`).join('\n')}`
     : '\n## 已有 Wiki 页面\n（暂无，这是第一个编译任务）'
 
-  // Step 1: Analysis
   const analysisPrompt: ChatMessage[] = [
     { role: 'system', content: fullSchema },
     { role: 'user', content: `分析以下资料，识别核心概念、与已有页面的关联、页面拆分建议。只输出分析，不生成页面。\n\n## 资料：${rawFileName}\n\n${rawContent.slice(0, 8000)}\n${existingList}` },
@@ -146,7 +278,6 @@ export async function compileNewPages(
 
   const analysis = await chat(analysisPrompt, overrideSettings, { kbPath, role: 'compile' })
 
-  // Step 2: Generation
   const fewShotExample = [
     '',
     '## 正确输出格式示例（Few-shot）',

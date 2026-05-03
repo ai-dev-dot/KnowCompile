@@ -1,6 +1,7 @@
 import { ipcMain, dialog } from 'electron'
 import { initKnowledgeBase, getKBPath, setKBPath, checkSchemaUpdate, updateSchema } from './kb-init'
 import { readLLMLogs, getLLMLogStats } from './llm-logger'
+import { readQAAnalytics, getQAAnalyticsStats } from './qa-analytics'
 import {
   listWikiPages,
   listRawFiles,
@@ -13,6 +14,7 @@ import {
   getSchemaFiles,
 } from './fs-manager'
 import { chat, compileNewPages, testConnection } from './llm-service'
+import type { ChatMessage } from './llm-service'
 import { getSettings, getPublicSettings, saveSettings } from './settings-store'
 import { buildIndex, search as searchIndex } from './search-indexer'
 import { exportHTML, exportMarkdown, backup } from './exporter'
@@ -22,7 +24,11 @@ import { IndexDB } from './index-db'
 import { VectorDB } from './vector-db'
 import { IndexRebuilder } from './index-rebuilder'
 import { incrementalCompile } from './compile-service'
-import { semanticQA } from './qa-service'
+import { semanticQA, semanticQAStream } from './qa-service'
+import {
+  createConversation, addMessage, getConversation, listConversations,
+  deleteConversation, getConversationHistory, updateFeedback,
+} from './conversation-store'
 import pathModule from 'path'
 import { resolveSafePath } from './path-utils'
 import { loadSchemaPrompt } from './schema-loader'
@@ -904,5 +910,141 @@ ${answer}
 
   ipcMain.handle('llm-logs:stats', (_event, kbPath: string) => {
     return getLLMLogStats(kbPath)
+  })
+
+  // QA analytics
+  ipcMain.handle('qa-analytics:list', (_event, kbPath: string, query?: { since?: string; limit?: number }) => {
+    return readQAAnalytics(kbPath, query)
+  })
+
+  ipcMain.handle('qa-analytics:stats', (_event, kbPath: string) => {
+    return getQAAnalyticsStats(kbPath)
+  })
+
+  // -----------------------------------------------------------------------
+  // QA Streaming (Phase 1) — with correlation ID to prevent interleaving
+  // -----------------------------------------------------------------------
+
+  ipcMain.handle('qa:ask-stream', async (event, requestId: string, kbPath: string, question: string, convId?: string, historyLimit?: number) => {
+    const db = getIndexDB(kbPath)
+    const vdb = await getVectorDB(kbPath)
+    const embedding = embeddingProxy
+
+    // Load conversation history if convId provided
+    let history: ChatMessage[] | undefined
+    if (convId) {
+      const msgs = getConversationHistory(kbPath, convId, historyLimit || 10)
+      history = msgs.map(m => ({ role: m.role, content: m.content }))
+    }
+
+    // Create conversation if not provided
+    let activeConvId = convId
+    if (!activeConvId) {
+      activeConvId = createConversation(kbPath).id
+    }
+
+    // Save user message
+    addMessage(kbPath, activeConvId, { role: 'user', content: question })
+
+    // Build system prompt context
+    let accumulated = ''
+
+    try {
+      const stream = semanticQAStream(
+        question, kbPath,
+        embedding as any as EmbeddingService,
+        db, vdb,
+        undefined, history,
+      )
+      for await (const ev of stream) {
+        if (event.sender.isDestroyed()) break
+        if (ev.type === 'token') {
+          accumulated = ev.accumulated || ''
+          event.sender.send('qa:token', {
+            requestId,
+            token: ev.token,
+            accumulated,
+          })
+        } else if (ev.type === 'done') {
+          // Save assistant message
+          addMessage(kbPath, activeConvId, {
+            role: 'assistant',
+            content: accumulated,
+            sources: ev.sources,
+          })
+          event.sender.send('qa:token-end', {
+            requestId,
+            sources: ev.sources,
+            accumulated,
+            convId: activeConvId,
+          })
+        } else if (ev.type === 'error') {
+          // Save partial answer
+          if (accumulated) {
+            addMessage(kbPath, activeConvId, {
+              role: 'assistant',
+              content: accumulated + '\n\n[已停止生成]',
+            })
+          }
+          event.sender.send('qa:token-end', {
+            requestId,
+            error: ev.error,
+            accumulated,
+            partial: true,
+            convId: activeConvId,
+          })
+        }
+      }
+    } catch (err: any) {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send('qa:token-end', {
+          requestId,
+          error: err?.message || 'Stream failed',
+          accumulated,
+          partial: true,
+          convId: activeConvId,
+        })
+      }
+    }
+  })
+
+  // -----------------------------------------------------------------------
+  // Feedback (Phase 1)
+  // -----------------------------------------------------------------------
+
+  ipcMain.handle('qa:feedback', (_event, kbPath: string, convId: string, msgIndex: number, type: 'helpful' | 'inaccurate' | 'more_detail') => {
+    const updated = updateFeedback(kbPath, convId, msgIndex, type)
+    // Also try to update the most recent QA LLM log entry
+    try {
+      const recentLogs = readLLMLogs(kbPath, { role: 'qa', limit: 1 })
+      if (recentLogs.length > 0) {
+        const entry = recentLogs[0]
+        entry.feedback = type
+        entry.feedbackAt = new Date().toISOString()
+        const { logLLMInteraction } = require('./llm-logger')
+        logLLMInteraction(kbPath, entry)
+      }
+    } catch { /* non-critical */ }
+    return { success: !!updated }
+  })
+
+  // -----------------------------------------------------------------------
+  // Conversation management (Phase 1)
+  // -----------------------------------------------------------------------
+
+  ipcMain.handle('conv:list', (_event, kbPath: string) => {
+    return listConversations(kbPath)
+  })
+
+  ipcMain.handle('conv:create', (_event, kbPath: string, title?: string) => {
+    return createConversation(kbPath, title)
+  })
+
+  ipcMain.handle('conv:get', (_event, kbPath: string, convId: string) => {
+    return getConversation(kbPath, convId)
+  })
+
+  ipcMain.handle('conv:delete', (_event, kbPath: string, convId: string) => {
+    return { success: deleteConversation(kbPath, convId) }
   })
 }

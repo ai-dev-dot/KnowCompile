@@ -105,9 +105,31 @@ export function useIPC() {
     compileV2: (kbPath: string, rawFilePath: string) =>
       api.invoke('llm:compile-v2', kbPath, rawFilePath) as Promise<{ compileOutput: string; plan: any; candidatePages: string[] }>,
 
-    // Semantic QA
+    // Semantic QA (non-streaming — backward compatible)
     qaV2: (kbPath: string, question: string) =>
       api.invoke('llm:qa-v2', kbPath, question) as Promise<{ answer: string; sources: { title: string; chunk_index: number; similarity: number }[] }>,
+
+    // Streaming QA (Phase 1)
+    askStream: (requestId: string, kbPath: string, question: string, convId?: string, historyLimit?: number) =>
+      api.invoke('qa:ask-stream', requestId, kbPath, question, convId, historyLimit),
+    onToken: (callback: (data: { requestId: string; token: string; accumulated: string }) => void) =>
+      api.on('qa:token', callback) as () => void,
+    onTokenEnd: (callback: (data: { requestId: string; sources?: { title: string; chunk_index: number; similarity: number }[]; accumulated?: string; error?: string; partial?: boolean; convId?: string }) => void) =>
+      api.on('qa:token-end', callback) as () => void,
+
+    // Feedback (Phase 1)
+    sendFeedback: (kbPath: string, convId: string, msgIndex: number, type: 'helpful' | 'inaccurate' | 'more_detail') =>
+      api.invoke('qa:feedback', kbPath, convId, msgIndex, type) as Promise<{ success: boolean }>,
+
+    // Conversation management (Phase 1)
+    listConversations: (kbPath: string) =>
+      api.invoke('conv:list', kbPath) as Promise<any[]>,
+    createConversation: (kbPath: string, title?: string) =>
+      api.invoke('conv:create', kbPath, title) as Promise<any>,
+    getConversation: (kbPath: string, convId: string) =>
+      api.invoke('conv:get', kbPath, convId) as Promise<any>,
+    deleteConversation: (kbPath: string, convId: string) =>
+      api.invoke('conv:delete', kbPath, convId) as Promise<{ success: boolean }>,
 
     // Advanced settings
     getAdvancedSettings: (kbPath: string) =>
@@ -136,6 +158,12 @@ export function useIPC() {
       api.invoke('llm-logs:list', kbPath, query) as Promise<any[]>,
     getLLMLogStats: (kbPath: string) =>
       api.invoke('llm-logs:stats', kbPath) as Promise<{ totalCalls: number; totalErrors: number; avgDurationMs: number; callsByRole: Record<string, number> }>,
+
+    // QA Analytics
+    getQAAnalytics: (kbPath: string, query?: { since?: string; limit?: number }) =>
+      api.invoke('qa-analytics:list', kbPath, query) as Promise<any[]>,
+    getQAAnalyticsStats: (kbPath: string) =>
+      api.invoke('qa-analytics:stats', kbPath) as Promise<any>,
 
     // Generic invoke for handlers not yet typed
     invoke: (channel: string, ...args: unknown[]) =>

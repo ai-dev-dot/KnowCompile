@@ -1,3 +1,5 @@
+import MarkdownRenderer from './MarkdownRenderer'
+
 interface Source {
   title: string
   chunk_index: number
@@ -8,12 +10,16 @@ interface Props {
   role: 'user' | 'assistant'
   content: string
   sources?: Source[]
+  msgIndex?: number
   onFeedback?: (type: 'helpful' | 'inaccurate' | 'more_detail') => void
+  feedbackState?: 'helpful' | 'inaccurate' | 'more_detail' | null
   onArchive?: () => void
   archived?: boolean
+  /** When true, show a "已停止生成" marker at the end. */
+  partial?: boolean
 }
 
-export default function ChatMessage({ role, content, sources, onFeedback, onArchive, archived }: Props) {
+export default function ChatMessage({ role, content, sources, msgIndex, onFeedback, feedbackState, onArchive, archived, partial }: Props) {
   return (
     <div className={`flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`max-w-[80%] rounded-xl px-4 py-3 ${
@@ -21,42 +27,67 @@ export default function ChatMessage({ role, content, sources, onFeedback, onArch
           ? 'bg-accent/30 border border-accent/40 text-text'
           : 'bg-gray-800 text-text'
       }`}>
-        <div className={`text-sm max-w-none whitespace-pre-wrap ${role === 'user' ? '' : 'prose prose-invert'}`}>
-          {content}
+        {/* Answer content — use MarkdownRenderer for assistant, plain text for user */}
+        <div className={`text-sm max-w-none ${role === 'user' ? 'whitespace-pre-wrap' : ''}`}>
+          {role === 'assistant' && !partial
+            ? <MarkdownRenderer content={content} />
+            : <span className="whitespace-pre-wrap">{content}</span>
+          }
         </div>
+
+        {/* Partial marker */}
+        {partial && (
+          <span className="text-xs text-text-muted mt-1 block">已停止生成</span>
+        )}
+
+        {/* Sources — numbered list */}
         {sources && sources.length > 0 && (
           <div className="mt-2 pt-2 border-t border-gray-700">
             <span className="text-xs text-text-muted">信息来源：</span>
             <ol className="mt-1 list-decimal list-inside">
               {sources.map((s, i) => (
-                <li key={i} className="text-xs text-link">
+                <li key={i} id={`source-${msgIndex}-${i}`} className="text-xs text-link scroll-mt-16">
                   {s.title}（{Math.round(s.similarity * 100)}%）
                 </li>
               ))}
             </ol>
           </div>
         )}
+
+        {/* Feedback buttons */}
         {role === 'assistant' && (onFeedback || onArchive) && (
           <div className="mt-2 pt-2 border-t border-gray-700 flex items-center gap-2 flex-wrap">
             {onFeedback && (
               <>
                 <button
                   onClick={() => onFeedback('helpful')}
-                  className="text-xs px-2 py-1 rounded bg-green-900/50 text-green-400 hover:bg-green-900 transition-colors"
+                  className={`text-xs px-2 py-1 rounded transition-colors ${
+                    feedbackState === 'helpful'
+                      ? 'bg-green-900/80 text-green-300'
+                      : 'bg-green-900/50 text-green-400 hover:bg-green-900'
+                  }`}
                 >
-                  有帮助
+                  {feedbackState === 'helpful' ? '✓ 有帮助' : '有帮助'}
                 </button>
                 <button
                   onClick={() => onFeedback('inaccurate')}
-                  className="text-xs px-2 py-1 rounded bg-red-900/50 text-red-400 hover:bg-red-900 transition-colors"
+                  className={`text-xs px-2 py-1 rounded transition-colors ${
+                    feedbackState === 'inaccurate'
+                      ? 'bg-red-900/80 text-red-300'
+                      : 'bg-red-900/50 text-red-400 hover:bg-red-900'
+                  }`}
                 >
-                  不准确
+                  {feedbackState === 'inaccurate' ? '✓ 不准确' : '不准确'}
                 </button>
                 <button
                   onClick={() => onFeedback('more_detail')}
-                  className="text-xs px-2 py-1 rounded bg-yellow-900/50 text-yellow-400 hover:bg-yellow-900 transition-colors"
+                  className={`text-xs px-2 py-1 rounded transition-colors ${
+                    feedbackState === 'more_detail'
+                      ? 'bg-yellow-900/80 text-yellow-300'
+                      : 'bg-yellow-900/50 text-yellow-400 hover:bg-yellow-900'
+                  }`}
                 >
-                  需更详细
+                  {feedbackState === 'more_detail' ? '✓ 需更详细' : '需更详细'}
                 </button>
               </>
             )}
