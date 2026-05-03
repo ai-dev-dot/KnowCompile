@@ -8,14 +8,16 @@ Use the /browse skill from gstack for all web browsing. Never use mcp__claude-in
 
 ## Skill routing
 
-gstack skills are **explicit-only** — invoke them ONLY when the user explicitly types the
-`/`-prefixed command. Never auto-invoke or suggest a gstack skill based on request content.
+**Default: superpowers.** For implementation tasks (debugging, TDD, code review,
+brainstorming, executing plans, etc.), use superpowers skills as directed by their rules.
 
-For all other tasks, use superpowers skills (brainstorming, debugging, TDD, code review,
-executing-plans, etc.) as directed by their routing rules.
+**gstack: name-explicit only.** gstack skills are NOT registered as slash commands.
+Invoke a gstack skill ONLY when the user explicitly says its name in natural language
+(e.g., "用 plan-ceo-review 评审方案"). Never auto-invoke a gstack skill based on the
+semantic content of the user's request — the user must name the skill.
 
-Reference — available gstack commands (explicit `/` invocation only):
-/office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review,
-/plan-devex-review, /autoplan, /investigate, /qa, /qa-only, /review,
-/design-review, /devex-review, /design-consultation, /ship, /land-and-deploy,
-/canary, /cso, /context-save, /context-restore, /browse, /retro, /learn
+Available gstack skills (invoke by name, not `/` prefix):
+office-hours, plan-ceo-review, plan-eng-review, plan-design-review,
+plan-devex-review, autoplan, investigate, qa, qa-only, review (gstack),
+design-review, devex-review, design-consultation, ship, land-and-deploy,
+canary, cso, context-save, context-restore, browse, retro, learn
