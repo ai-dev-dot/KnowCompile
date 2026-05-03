@@ -38,11 +38,12 @@ electron/           # 主进程（Electron main process）
   llm-logger.ts     # LLM 交互日志
   qa-analytics.ts   # 问答管道指标
   conversation-store.ts # 对话持久化（JSON 文件）
+  query-rewriter.ts # 查询改写（同义词 + 关键词）
   settings-store.ts  # 用户设置
   search-indexer.ts  # FlexSearch 全文索引
   compile-validator.ts # 编译输出质量检查
   wiki-normalizer.ts # Wiki 页面规范化
-  utils.ts          # 共享工具
+  utils.ts          # 共享工具（stripThinking, extractThinking）
 src/                # 渲染进程（React）
   App.tsx           # 根组件，视图路由
   views/
