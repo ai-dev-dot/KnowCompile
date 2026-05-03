@@ -33,6 +33,7 @@ export interface QAResult {
   answer: string
   sources: { title: string; chunk_index: number; similarity: number }[]
   suggestions?: string[]
+  suggestArchive?: boolean
 }
 
 /** Parse `## 建议问题` section from the answer. Returns cleaned answer + extracted suggestions. */
@@ -429,10 +430,16 @@ export async function semanticQA(
 
     const { cleanAnswer, suggestions } = parseSuggestions(response)
 
-    // Knowledge gap detection: if KB couldn't answer, log the gap
+    // Knowledge gap detection
     if (ctx.contextText === '' || /(未找到|无法回答|未提供|不相关).*信息/i.test(cleanAnswer)) {
       logGap(kbPath, question)
     }
+
+    // LLM-based archive suggestion (lightweight check)
+    let suggestArchive = false
+    try {
+      suggestArchive = await checkArchiveWorthy(question, cleanAnswer, ctx.sources, overrideSettings)
+    } catch { /* non-critical */ }
 
     // Optional: content review for answer quality
     let finalAnswer = cleanAnswer
@@ -449,7 +456,7 @@ export async function semanticQA(
     m.success = true
     logQAAnalytics(kbPath, { ...m, timestamp: new Date().toISOString() })
 
-    return { answer: finalAnswer, sources: ctx.sources, suggestions }
+    return { answer: finalAnswer, sources: ctx.sources, suggestions, suggestArchive }
 
   } catch (err: any) {
     m.totalMs = Math.round(performance.now() - t0)
@@ -470,11 +477,11 @@ export async function reviewQAAnswer(
   sources: { title: string }[],
   kbPath: string,
   overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
-): Promise<{ passed: boolean; feedback: string }> {
+): Promise<{ passed: boolean; archiveWorthy: boolean; feedback: string }> {
   const sourceList = sources.map(s => `- ${s.title}`).join('\n') || '（无来源）'
 
   const reviewPrompt: ChatMessage[] = [
-    { role: 'system', content: '你是一个事实核查助手。你的任务是检查 AI 生成的回答是否严格基于提供的来源文档，没有编造信息。' },
+    { role: 'system', content: '你是一个事实核查助手。你的任务是：1) 检查 AI 回答是否严格基于来源文档，没有编造信息；2) 判断这个回答是否包含有价值的综合、对比或新洞察，值得作为独立 Wiki 页面归档。' },
     { role: 'user', content: [
       `## 用户问题`,
       question,
@@ -485,23 +492,61 @@ export async function reviewQAAnswer(
       `## 参考来源列表`,
       sourceList,
       '',
-      `请检查：`,
+      `请逐项检查：`,
       `1. 回答中的事实是否都能在来源列表中找到依据？`,
       `2. 有没有编造或过度推断的内容？`,
-      `3. 如果有问题，具体指出哪里有问题。`,
+      `3. 这个回答是否对多个来源进行了有价值的综合、对比分析，或形成了来源中未直接表述的新洞察？`,
+      `4. 如果值得归档为 Wiki 页面，它提供了什么独特价值？`,
       '',
-      `如果回答完全基于来源且没有编造，回复 PASS。`,
-      `如果有问题，回复 FAIL: 具体问题描述。`,
+      `请用以下格式回复：`,
+      `第一行：PASS（通过审查）或 FAIL: 问题描述`,
+      `第二行：ARCHIVE: YES 或 ARCHIVE: NO，附一句话理由`,
     ].join('\n') },
   ]
 
   try {
     const response = await chat(reviewPrompt, overrideSettings, { kbPath, role: 'review' })
-    const passed = response.toUpperCase().startsWith('PASS')
-    return { passed, feedback: response }
+    const passed = /^\s*PASS/i.test(response.split('\n')[0] || '')
+    const archiveWorthy = /ARCHIVE:\s*YES/i.test(response)
+    return { passed, archiveWorthy, feedback: response }
   } catch {
-    // Review failure should never block the answer
-    return { passed: true, feedback: 'Review unavailable' }
+    return { passed: true, archiveWorthy: false, feedback: 'Review unavailable' }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Archive-worthiness check (lightweight, runs after every QA)
+// ---------------------------------------------------------------------------
+
+export async function checkArchiveWorthy(
+  question: string,
+  answer: string,
+  sources: { title: string }[],
+  overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
+): Promise<boolean> {
+  // Quick heuristic pre-filter: skip obviously bad candidates
+  if (answer.length < 100 || sources.length === 0) return false
+  if (/(未找到|无法回答|未提供)/i.test(answer)) return false
+
+  const sourceTitles = sources.map(s => s.title).join('、') || '无'
+
+  const checkPrompt: ChatMessage[] = [
+    { role: 'system', content: '你是一个知识管理助手。判断问答是否值得归档为 Wiki 页面。只回答 YES 或 NO。' },
+    { role: 'user', content: [
+      `问题：${question}`,
+      `回答：${answer.slice(0, 500)}`,
+      `来源：${sourceTitles}`,
+      '',
+      `这个回答是否包含有价值的综合、对比分析或新洞察，值得作为独立 Wiki 页面保存？`,
+      `只回答 ARCHIVE: YES 或 ARCHIVE: NO。`,
+    ].join('\n') },
+  ]
+
+  try {
+    const response = await chat(checkPrompt, overrideSettings)
+    return /ARCHIVE:\s*YES/i.test(response)
+  } catch {
+    return false
   }
 }
 
@@ -515,6 +560,7 @@ export interface QAStreamEvent {
   accumulated?: string
   thinking?: string
   suggestions?: string[]
+  suggestArchive?: boolean
   sources?: { title: string; chunk_index: number; similarity: number }[]
   error?: string
 }
@@ -585,6 +631,12 @@ export async function* semanticQAStream(
       logGap(kbPath, question)
     }
 
+    // LLM-based archive suggestion
+    let suggestArchive = false
+    try {
+      suggestArchive = await checkArchiveWorthy(question, cleanAnswer, ctx.sources, overrideSettings)
+    } catch { /* non-critical */ }
+
     // Optional: content review
     const reviewEnabled = getSettingNum(db, 'qa_review_enabled', 0) === 1
     if (reviewEnabled) {
@@ -598,7 +650,7 @@ export async function* semanticQAStream(
     m.success = true
     logQAAnalytics(kbPath, { ...m, timestamp: new Date().toISOString() })
 
-    yield { type: 'done', sources: ctx.sources, suggestions, accumulated: cleanAnswer }
+    yield { type: 'done', sources: ctx.sources, suggestions, suggestArchive, accumulated: cleanAnswer }
 
   } catch (err: any) {
     if (err?.name === 'AbortError' || signal?.aborted) {

@@ -16,6 +16,7 @@ interface Message {
   content: string
   thinking?: string
   suggestions?: string[]
+  suggestArchive?: boolean
   sources?: Source[]
   archived?: boolean
   feedback?: 'helpful' | 'inaccurate' | 'more_detail'
@@ -175,6 +176,7 @@ export default function QAView({ kbPath }: Props) {
           content,
           thinking: data.thinking,
           suggestions: data.suggestions,
+          suggestArchive: data.suggestArchive,
           sources: data.sources || [],
         }])
         // Refresh gaps + conversation list
@@ -300,10 +302,7 @@ export default function QAView({ kbPath }: Props) {
           ) : (
             <>
               {messages.map((msg, i) => {
-                const suggestArchive = msg.role === 'assistant' && !msg.archived
-                  && msg.content.length > 200
-                  && (msg.sources || []).length > 0
-                  && !/(未找到|无法回答|未提供)/i.test(msg.content)
+                const suggestArchive = msg.suggestArchive && !msg.archived
                 return (
                   <ChatMessage
                     key={i}

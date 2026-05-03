@@ -982,6 +982,7 @@ ${answer}
             sources: ev.sources,
             accumulated: finalContent,
             suggestions: ev.suggestions,
+            suggestArchive: ev.suggestArchive,
             thinking: ev.thinking,
             convId: activeConvId,
           })
@@ -998,6 +999,7 @@ ${answer}
             error: ev.error,
             accumulated,
             partial: true,
+            suggestArchive: false,
             convId: activeConvId,
           })
         }
