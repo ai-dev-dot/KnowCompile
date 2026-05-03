@@ -29,7 +29,8 @@ import {
   createConversation, addMessage, getConversation, listConversations,
   deleteConversation, getConversationHistory, updateFeedback,
 } from './conversation-store'
-import { listGaps, deleteGap } from './gap-store'
+import { listGaps, deleteGap, getGapStats } from './gap-store'
+import { generateDailyReport } from './report-generator'
 import pathModule from 'path'
 import { resolveSafePath } from './path-utils'
 import { loadSchemaPrompt } from './schema-loader'
@@ -1067,5 +1068,14 @@ ${answer}
 
   ipcMain.handle('gaps:delete', (_event, kbPath: string, gapId: string) => {
     return { success: deleteGap(kbPath, gapId) }
+  })
+
+  ipcMain.handle('gaps:stats', (_event, kbPath: string) => {
+    return getGapStats(kbPath)
+  })
+
+  // QA daily report
+  ipcMain.handle('report:qa-daily', (_event, kbPath: string) => {
+    return generateDailyReport(kbPath)
   })
 }

@@ -38,7 +38,8 @@ const ALLOWED_CHANNELS = new Set([
   // Conversation management
   'conv:list', 'conv:create', 'conv:delete', 'conv:get',
   // Knowledge gaps
-  'gaps:list', 'gaps:delete',
+  'gaps:list', 'gaps:delete', 'gaps:stats',
+  'report:qa-daily',
 ])
 
 const api = {

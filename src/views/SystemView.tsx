@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useIPC, type SystemInfo } from '../hooks/useIPC'
+import QAAnalyticsPanel from '../components/QAAnalyticsPanel'
 
 interface Props { kbPath: string; active?: boolean }
 
@@ -27,6 +28,7 @@ function StatCard({ title, children }: { title: string; children: React.ReactNod
 }
 
 export default function SystemView({ kbPath, active }: Props) {
+  const [tab, setTab] = useState<'system' | 'qa'>('system')
   const [info, setInfo] = useState<SystemInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [mainLagSamples, setMainLagSamples] = useState<{ time: number; delay: number }[]>([])
@@ -80,8 +82,28 @@ export default function SystemView({ kbPath, active }: Props) {
   return (
     <div className="flex-1 overflow-y-auto p-8">
       <div className="max-w-2xl mx-auto">
-        <h2 className="text-xl font-semibold text-text mb-6">系统信息</h2>
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setTab('system')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              tab === 'system' ? 'bg-accent text-gray-950' : 'bg-gray-800 text-text-muted hover:text-text'
+            }`}
+          >
+            系统诊断
+          </button>
+          <button
+            onClick={() => setTab('qa')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              tab === 'qa' ? 'bg-accent text-gray-950' : 'bg-gray-800 text-text-muted hover:text-text'
+            }`}
+          >
+            QA 分析
+          </button>
+        </div>
 
+        {tab === 'qa' ? (
+          <QAAnalyticsPanel kbPath={kbPath} />
+        ) : (
         <div className="space-y-5">
           <StatCard title="SQLite 索引库">
             <StatRow label="数据库文件" value={`pages.db · ${formatKB(info.sqlite.fileSizeKB)} · WAL 模式`} />
@@ -135,6 +157,7 @@ export default function SystemView({ kbPath, active }: Props) {
             )}
           </StatCard>
         </div>
+        )}
       </div>
     </div>
   )
