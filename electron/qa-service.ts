@@ -398,12 +398,22 @@ export async function semanticQA(
 
     const { cleanAnswer, suggestions } = parseSuggestions(response)
 
+    // Optional: content review for answer quality
+    let finalAnswer = cleanAnswer
+    const reviewEnabled = getSettingNum(db, 'qa_review_enabled', 0) === 1
+    if (reviewEnabled) {
+      const review = await reviewQAAnswer(question, cleanAnswer, ctx.sources, kbPath, overrideSettings)
+      if (!review.passed) {
+        finalAnswer = `${cleanAnswer}\n\n---\n> ⚠️ 内容审查未通过：${review.feedback.slice(0, 200)}`
+      }
+    }
+
     m.totalMs = Math.round(performance.now() - t0)
-    m.answerLength = cleanAnswer.length
+    m.answerLength = finalAnswer.length
     m.success = true
     logQAAnalytics(kbPath, { ...m, timestamp: new Date().toISOString() })
 
-    return { answer: cleanAnswer, sources: ctx.sources, suggestions }
+    return { answer: finalAnswer, sources: ctx.sources, suggestions }
 
   } catch (err: any) {
     m.totalMs = Math.round(performance.now() - t0)
@@ -411,6 +421,51 @@ export async function semanticQA(
     m.error = err?.message ?? String(err)
     logQAAnalytics(kbPath, { ...m, timestamp: new Date().toISOString() })
     throw err
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Content review (optional, off by default)
+// ---------------------------------------------------------------------------
+
+export async function reviewQAAnswer(
+  question: string,
+  answer: string,
+  sources: { title: string }[],
+  kbPath: string,
+  overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
+): Promise<{ passed: boolean; feedback: string }> {
+  const sourceList = sources.map(s => `- ${s.title}`).join('\n') || '（无来源）'
+
+  const reviewPrompt: ChatMessage[] = [
+    { role: 'system', content: '你是一个事实核查助手。你的任务是检查 AI 生成的回答是否严格基于提供的来源文档，没有编造信息。' },
+    { role: 'user', content: [
+      `## 用户问题`,
+      question,
+      '',
+      `## AI 回答`,
+      answer,
+      '',
+      `## 参考来源列表`,
+      sourceList,
+      '',
+      `请检查：`,
+      `1. 回答中的事实是否都能在来源列表中找到依据？`,
+      `2. 有没有编造或过度推断的内容？`,
+      `3. 如果有问题，具体指出哪里有问题。`,
+      '',
+      `如果回答完全基于来源且没有编造，回复 PASS。`,
+      `如果有问题，回复 FAIL: 具体问题描述。`,
+    ].join('\n') },
+  ]
+
+  try {
+    const response = await chat(reviewPrompt, overrideSettings, { kbPath, role: 'review' })
+    const passed = response.toUpperCase().startsWith('PASS')
+    return { passed, feedback: response }
+  } catch {
+    // Review failure should never block the answer
+    return { passed: true, feedback: 'Review unavailable' }
   }
 }
 
@@ -483,14 +538,21 @@ export async function* semanticQAStream(
     // Parse suggestions from the final accumulated response
     let cleanAnswer = accumulated
     let suggestions: string[] = []
-    // Get final accumulated from the last token — use the loop variable
     if (accumulated) {
       const parsed = parseSuggestions(accumulated)
       cleanAnswer = parsed.cleanAnswer
       suggestions = parsed.suggestions
     }
 
-    // TODO: re-yield the clean answer? For now the streaming frontend will re-parse
+    // Optional: content review
+    const reviewEnabled = getSettingNum(db, 'qa_review_enabled', 0) === 1
+    if (reviewEnabled) {
+      const review = await reviewQAAnswer(question, cleanAnswer, ctx.sources, kbPath, overrideSettings)
+      if (!review.passed) {
+        cleanAnswer = `${cleanAnswer}\n\n---\n> ⚠️ 内容审查未通过：${review.feedback.slice(0, 200)}`
+      }
+    }
+
     m.answerLength = cleanAnswer.length
     m.success = true
     logQAAnalytics(kbPath, { ...m, timestamp: new Date().toISOString() })

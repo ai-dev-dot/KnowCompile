@@ -845,6 +845,7 @@ export function registerIPCHandlers() {
       qa_final_context_count: '8',
       qa_context_max_tokens: '3000',
       qa_hybrid_search: '1',
+      qa_review_enabled: '0',
     }
     const saved = db.getAllSettings()
     return { ...defaults, ...saved }
