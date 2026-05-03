@@ -8,18 +8,14 @@ Use the /browse skill from gstack for all web browsing. Never use mcp__claude-in
 
 ## Skill routing
 
-When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
+gstack skills are **explicit-only** — invoke them ONLY when the user explicitly types the
+`/`-prefixed command. Never auto-invoke or suggest a gstack skill based on request content.
 
-Key routing rules:
-- Product ideas/brainstorming -> invoke /office-hours
-- Strategy/scope -> invoke /plan-ceo-review
-- Architecture -> invoke /plan-eng-review
-- Design system/plan review -> invoke /design-consultation or /plan-design-review
-- Full review pipeline -> invoke /autoplan
-- Bugs/errors -> invoke /investigate
-- QA/testing site behavior -> invoke /qa or /qa-only
-- Code review/diff check -> invoke /review
-- Visual polish -> invoke /design-review
-- Ship/deploy/PR -> invoke /ship or /land-and-deploy
-- Save progress -> invoke /context-save
-- Resume context -> invoke /context-restore
+For all other tasks, use superpowers skills (brainstorming, debugging, TDD, code review,
+executing-plans, etc.) as directed by their routing rules.
+
+Reference — available gstack commands (explicit `/` invocation only):
+/office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review,
+/plan-devex-review, /autoplan, /investigate, /qa, /qa-only, /review,
+/design-review, /devex-review, /design-consultation, /ship, /land-and-deploy,
+/canary, /cso, /context-save, /context-restore, /browse, /retro, /learn
