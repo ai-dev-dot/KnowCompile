@@ -9,6 +9,7 @@ interface Source {
 interface Props {
   role: 'user' | 'assistant'
   content: string
+  thinking?: string
   sources?: Source[]
   msgIndex?: number
   onFeedback?: (type: 'helpful' | 'inaccurate' | 'more_detail') => void
@@ -19,7 +20,7 @@ interface Props {
   partial?: boolean
 }
 
-export default function ChatMessage({ role, content, sources, msgIndex, onFeedback, feedbackState, onArchive, archived, partial }: Props) {
+export default function ChatMessage({ role, content, thinking, sources, msgIndex, onFeedback, feedbackState, onArchive, archived, partial }: Props) {
   return (
     <div className={`flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`max-w-[80%] rounded-xl px-4 py-3 ${
@@ -27,6 +28,14 @@ export default function ChatMessage({ role, content, sources, msgIndex, onFeedba
           ? 'bg-accent/30 border border-accent/40 text-text'
           : 'bg-gray-800 text-text'
       }`}>
+        {/* Thinking/reasoning display */}
+        {role === 'assistant' && thinking && (
+          <details className="mb-2 text-xs">
+            <summary className="text-text-muted cursor-pointer hover:text-text">推理过程</summary>
+            <pre className="mt-1 whitespace-pre-wrap text-text-muted/70 border-l-2 border-gray-600 pl-2 max-h-48 overflow-y-auto">{thinking}</pre>
+          </details>
+        )}
+
         {/* Answer content — use MarkdownRenderer for assistant, plain text for user */}
         <div className={`text-sm max-w-none ${role === 'user' ? 'whitespace-pre-wrap' : ''}`}>
           {role === 'assistant' && !partial

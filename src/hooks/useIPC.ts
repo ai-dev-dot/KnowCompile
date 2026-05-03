@@ -112,9 +112,9 @@ export function useIPC() {
     // Streaming QA (Phase 1)
     askStream: (requestId: string, kbPath: string, question: string, convId?: string, historyLimit?: number) =>
       api.invoke('qa:ask-stream', requestId, kbPath, question, convId, historyLimit),
-    onToken: (callback: (data: { requestId: string; token: string; accumulated: string }) => void) =>
+    onToken: (callback: (data: { requestId: string; token: string; accumulated: string; thinking?: string }) => void) =>
       api.on('qa:token', callback) as () => void,
-    onTokenEnd: (callback: (data: { requestId: string; sources?: { title: string; chunk_index: number; similarity: number }[]; accumulated?: string; error?: string; partial?: boolean; convId?: string }) => void) =>
+    onTokenEnd: (callback: (data: { requestId: string; sources?: { title: string; chunk_index: number; similarity: number }[]; accumulated?: string; thinking?: string; error?: string; partial?: boolean; convId?: string }) => void) =>
       api.on('qa:token-end', callback) as () => void,
 
     // Feedback (Phase 1)

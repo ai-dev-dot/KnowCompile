@@ -12,6 +12,7 @@ interface Source {
 interface Message {
   role: 'user' | 'assistant'
   content: string
+  thinking?: string
   sources?: Source[]
   archived?: boolean
   feedback?: 'helpful' | 'inaccurate' | 'more_detail'
@@ -33,6 +34,7 @@ export default function QAView({ kbPath }: Props) {
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [streamingToken, setStreamingToken] = useState('')
+  const [streamingThinking, setStreamingThinking] = useState('')
   const [streamingError, setStreamingError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const ipc = useIPC()
@@ -121,6 +123,7 @@ export default function QAView({ kbPath }: Props) {
     const cleanupToken = ipc.onToken((data) => {
       if (data.requestId !== requestId) return // correlation ID guard
       tokenBufferRef.current += data.token
+      if (data.thinking) setStreamingThinking(data.thinking)
       if (!rafIdRef.current) {
         rafIdRef.current = requestAnimationFrame(() => {
           setStreamingToken(tokenBufferRef.current)
@@ -146,6 +149,7 @@ export default function QAView({ kbPath }: Props) {
           setMessages(prev => [...prev, {
             role: 'assistant',
             content: partialContent,
+            thinking: data.thinking,
             sources: data.sources,
             partial: true,
           }])
@@ -157,6 +161,7 @@ export default function QAView({ kbPath }: Props) {
         setMessages(prev => [...prev, {
           role: 'assistant',
           content,
+          thinking: data.thinking,
           sources: data.sources || [],
         }])
         // Refresh conversation list (title may have updated)
@@ -265,6 +270,7 @@ export default function QAView({ kbPath }: Props) {
                   key={i}
                   role={msg.role}
                   content={msg.content}
+                  thinking={msg.thinking}
                   sources={msg.sources}
                   msgIndex={i}
                   archived={msg.archived}
@@ -281,6 +287,12 @@ export default function QAView({ kbPath }: Props) {
           {streaming && streamingToken && (
             <div className="flex justify-start mb-4">
               <div className="max-w-[80%] rounded-xl px-4 py-3 bg-gray-800 text-text">
+                {streamingThinking && (
+                  <details className="mb-2 text-xs" open>
+                    <summary className="text-text-muted cursor-pointer hover:text-text">推理过程</summary>
+                    <pre className="mt-1 whitespace-pre-wrap text-text-muted/70 border-l-2 border-gray-600 pl-2">{streamingThinking}</pre>
+                  </details>
+                )}
                 <div className="text-sm max-w-none prose prose-invert">
                   {streamingToken}
                   <span className="inline-block w-1.5 h-4 bg-accent ml-0.5 animate-pulse align-text-bottom" />

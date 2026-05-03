@@ -965,6 +965,7 @@ ${answer}
             requestId,
             token: ev.token,
             accumulated,
+            thinking: ev.thinking,
           })
         } else if (ev.type === 'done') {
           // Save assistant message
@@ -977,6 +978,7 @@ ${answer}
             requestId,
             sources: ev.sources,
             accumulated,
+            thinking: ev.thinking,
             convId: activeConvId,
           })
         } else if (ev.type === 'error') {

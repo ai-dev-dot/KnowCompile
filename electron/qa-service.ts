@@ -394,6 +394,7 @@ export interface QAStreamEvent {
   type: 'token' | 'done' | 'error'
   token?: string
   accumulated?: string
+  thinking?: string
   sources?: { title: string; chunk_index: number; similarity: number }[]
   error?: string
 }
@@ -443,7 +444,7 @@ export async function* semanticQAStream(
     for await (const st of stream) {
       if (signal?.aborted) break
       if (st.token) {
-        yield { type: 'token', token: st.token, accumulated: st.accumulated }
+        yield { type: 'token', token: st.token, accumulated: st.accumulated, thinking: st.thinking }
       }
     }
 

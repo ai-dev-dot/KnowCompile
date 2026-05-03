@@ -5,7 +5,7 @@ import path from 'path'
 import { getSettings } from './settings-store'
 import { loadSchemaPrompt } from './schema-loader'
 import { logLLMInteraction, type LLMLogEntry } from './llm-logger'
-import { stripThinking } from './utils'
+import { stripThinking, extractThinking } from './utils'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -117,6 +117,8 @@ export interface StreamToken {
   token: string | null
   /** Accumulated full response so far (for partial display fallback). */
   accumulated: string
+  /** Accumulated reasoning/thinking content from <think> tags. */
+  thinking?: string
 }
 
 export async function* chatStream(
@@ -128,6 +130,8 @@ export async function* chatStream(
   const settings = overrideSettings || getSettings().llm
   const startTime = Date.now()
   let accumulated = ''
+  let accumulatedRaw = '' // includes think tags for extraction
+  let thinking = ''
   let success = false
   let errorMsg: string | undefined
 
@@ -153,10 +157,12 @@ export async function* chatStream(
       for await (const event of stream) {
         if (signal?.aborted) break
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          accumulatedRaw += event.delta.text
           const chunk = stripThinking(event.delta.text)
+          thinking = extractThinking(accumulatedRaw)
           if (chunk) {
             accumulated += chunk
-            yield { token: chunk, accumulated }
+            yield { token: chunk, accumulated, thinking }
           }
         }
       }
@@ -176,11 +182,12 @@ export async function* chatStream(
         if (signal?.aborted) break
         const delta = chunk.choices[0]?.delta?.content
         if (delta) {
-          // Some OpenAI-compatible providers leak think tags in chunks
+          accumulatedRaw += delta
           const cleaned = stripThinking(delta)
+          thinking = extractThinking(accumulatedRaw)
           if (cleaned) {
             accumulated += cleaned
-            yield { token: cleaned, accumulated }
+            yield { token: cleaned, accumulated, thinking }
           }
         }
       }
