@@ -506,12 +506,35 @@ export async function reviewQAAnswer(
 
   try {
     const response = await chat(reviewPrompt, overrideSettings, { kbPath, role: 'review' })
-    const passed = /^\s*PASS/i.test(response.split('\n')[0] || '')
-    const archiveWorthy = /ARCHIVE:\s*YES/i.test(response)
+    const { passed, archiveWorthy } = parseReviewVerdict(response)
     return { passed, archiveWorthy, feedback: response }
   } catch {
     return { passed: true, archiveWorthy: false, feedback: 'Review unavailable' }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Archive-worthiness helpers (exported for testing)
+// ---------------------------------------------------------------------------
+
+/** Pre-filter: skip obviously poor archive candidates before calling LLM. */
+export function isArchiveCandidate(answer: string, sources: { title: string }[]): boolean {
+  if (answer.length < 100 || sources.length === 0) return false
+  if (/(未找到|无法回答|未提供)/i.test(answer)) return false
+  return true
+}
+
+/** Parse the archive verdict from the LLM response. */
+export function parseArchiveVerdict(response: string): boolean {
+  return /ARCHIVE:\s*YES/i.test(response)
+}
+
+/** Parse the review verdict from the LLM response. */
+export function parseReviewVerdict(response: string): { passed: boolean; archiveWorthy: boolean } {
+  const firstLine = response.split('\n')[0] || ''
+  const passed = /^\s*PASS/i.test(firstLine)
+  const archiveWorthy = /ARCHIVE:\s*YES/i.test(response)
+  return { passed, archiveWorthy }
 }
 
 // ---------------------------------------------------------------------------
@@ -524,9 +547,7 @@ export async function checkArchiveWorthy(
   sources: { title: string }[],
   overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
 ): Promise<boolean> {
-  // Quick heuristic pre-filter: skip obviously bad candidates
-  if (answer.length < 100 || sources.length === 0) return false
-  if (/(未找到|无法回答|未提供)/i.test(answer)) return false
+  if (!isArchiveCandidate(answer, sources)) return false
 
   const sourceTitles = sources.map(s => s.title).join('、') || '无'
 
@@ -544,7 +565,7 @@ export async function checkArchiveWorthy(
 
   try {
     const response = await chat(checkPrompt, overrideSettings)
-    return /ARCHIVE:\s*YES/i.test(response)
+    return parseArchiveVerdict(response)
   } catch {
     return false
   }
