@@ -18,6 +18,7 @@ import { chat, chatStream } from './llm-service'
 import type { ChatMessage } from './llm-service'
 import { distanceToSimilarity } from './vector-utils'
 import { logQAAnalytics, QAStepMetrics } from './qa-analytics'
+import { search as keywordSearch } from './search-indexer'
 import fs from 'fs'
 import path from 'path'
 
@@ -121,13 +122,15 @@ export async function buildContext(
   m.embeddingMs = Math.round(performance.now() - t1)
   m.embeddingDim = questionVec.length
 
-  // Step 2 — Vector search
+  // Step 2 — Vector search + keyword search (hybrid, parallel)
   const t2 = performance.now()
   m.retrievalCount = getSettingNum(db, 'qa_retrieval_count', 30)
-  const rawResults = await vdb.search(questionVec, {
-    type: 'page',
-    topK: m.retrievalCount,
-  })
+  const enableHybrid = getSettingNum(db, 'qa_hybrid_search', 1) === 1
+
+  const [rawResults, kwResults] = await Promise.all([
+    vdb.search(questionVec, { type: 'page', topK: m.retrievalCount }),
+    enableHybrid ? Promise.resolve(keywordSearch(kbPath, question)) : Promise.resolve([] as { name: string }[]),
+  ])
   m.searchMs = Math.round(performance.now() - t2)
   m.rawResultCount = rawResults.length
 
@@ -171,6 +174,14 @@ export async function buildContext(
     }
   }
 
+  // Build keyword rank lookup: page title → RRF score
+  const kwRanks = new Map<string, number>()
+  if (enableHybrid && kwResults.length > 0) {
+    for (let i = 0; i < kwResults.length; i++) {
+      kwRanks.set(kwResults[i].name, 1 / (60 + i + 1))
+    }
+  }
+
   const weighted: WeightedChunk[] = []
   for (const [, chunks] of perPage) {
     for (const item of chunks) {
@@ -194,6 +205,12 @@ export async function buildContext(
             m.freshnessBoosts++
           }
         }
+      }
+
+      // Hybrid: boost chunks whose page matched keyword search
+      const kwScore = kwRanks.get(title)
+      if (kwScore) {
+        weight += kwScore * 2.0 // RRF keyword boost factor
       }
 
       const pageFilePath = page ? path.join(kbPath, page.path) : ''
