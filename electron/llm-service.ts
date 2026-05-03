@@ -11,8 +11,8 @@ import { stripThinking, extractThinking } from './utils'
 // Token + cost estimation (估算值，仅供参考)
 // ---------------------------------------------------------------------------
 
-/** Rough token estimate: Chinese chars / 2 ≈ tokens. */
-function estimateTokens(text: string): number {
+/** Rough token estimate: Chinese chars / 2 ≈ tokens. 估算值，仅供参考。 */
+export function estimateLLMTokens(text: string): number {
   return Math.ceil(text.length / 2)
 }
 
@@ -27,12 +27,12 @@ const MODEL_PRICES: Record<string, { input: number; output: number }> = {
   'default':                  { input: 1, output: 5 },
 }
 
-function estimateCost(model: string, promptTokens: number, responseTokens: number): number {
+export function estimateLLMCost(model: string, promptTokens: number, responseTokens: number): number {
   const price = MODEL_PRICES[model] || MODEL_PRICES['default']
   return (promptTokens / 1_000_000) * price.input + (responseTokens / 1_000_000) * price.output
 }
 
-function categorizeError(err: Error | undefined, signal?: AbortSignal): LLMLogEntry['errorCategory'] {
+export function categorizeLLMError(err: Error | undefined, signal?: AbortSignal): LLMLogEntry['errorCategory'] {
   if (!err) return undefined
   const msg = err.message || ''
   if (signal?.aborted || err.name === 'AbortError') return undefined // not an error
@@ -113,8 +113,8 @@ async function runLLM(params: RunLLMParams): Promise<string> {
 
   if (params.logInfo?.kbPath) {
     const lastUserMsg = [...params.messages].reverse().find(m => m.role === 'user')
-    const promptTokens = estimateTokens(params.messages.reduce((sum, m) => sum + m.content.length, 0))
-    const responseTokens = estimateTokens(response.length)
+    const promptTokens = estimateLLMTokens(params.messages.reduce((sum, m) => sum + m.content.length, 0))
+    const responseTokens = estimateLLMTokens(response.length)
     logLLMInteraction(params.logInfo.kbPath, {
       timestamp: new Date().toISOString(),
       qaSessionId: params.logInfo.qaSessionId,
@@ -128,10 +128,10 @@ async function runLLM(params: RunLLMParams): Promise<string> {
       durationMs: Date.now() - startTime,
       success,
       error: errorMsg,
-      errorCategory: success ? undefined : categorizeError(new Error(errorMsg || ''), params.signal),
+      errorCategory: success ? undefined : categorizeLLMError(new Error(errorMsg || ''), params.signal),
       promptTokens,
       responseTokens,
-      costEstimate: estimateCost(settings.model, promptTokens, responseTokens),
+      costEstimate: estimateLLMCost(settings.model, promptTokens, responseTokens),
     })
   }
 
@@ -247,8 +247,8 @@ export async function* chatStream(
   // Log the full interaction
   if (logInfo?.kbPath) {
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
-    const promptTokens = estimateTokens(messages.reduce((sum, m) => sum + m.content.length, 0))
-    const responseTokens = estimateTokens(accumulated.length)
+    const promptTokens = estimateLLMTokens(messages.reduce((sum, m) => sum + m.content.length, 0))
+    const responseTokens = estimateLLMTokens(accumulated.length)
     logLLMInteraction(logInfo.kbPath, {
       timestamp: new Date().toISOString(),
       qaSessionId: logInfo.qaSessionId,
@@ -262,10 +262,10 @@ export async function* chatStream(
       durationMs: Date.now() - startTime,
       success,
       error: errorMsg,
-      errorCategory: success ? undefined : categorizeError(new Error(errorMsg || ''), signal),
+      errorCategory: success ? undefined : categorizeLLMError(new Error(errorMsg || ''), signal),
       promptTokens,
       responseTokens,
-      costEstimate: estimateCost(settings.model, promptTokens, responseTokens),
+      costEstimate: estimateLLMCost(settings.model, promptTokens, responseTokens),
     })
   }
 
