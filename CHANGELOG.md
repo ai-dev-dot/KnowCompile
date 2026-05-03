@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.2.1 (2026-05-03)
+
+统一日志和可观测性——评估 AI 问答的每个环节。
+
+### 新增
+
+- **Session ID 串联** — 每次 QA 生成唯一 `qaSessionId`，贯穿 LLM 日志 → QA 管道 → 知识缺口 → 反馈，完整链路可追踪。
+- **成本追踪** — LLM 日志新增 `promptTokens`、`responseTokens`、`costEstimate` 字段（估算值，仅供参考）。
+- **错误分类** — LLM 日志新增 `errorCategory`：timeout / rate_limit / auth / network / other。
+- **反馈权重审计** — QA 分析新增 `feedbackWeightsApplied`，记录哪些来源页面被反馈调整了权重及原因。
+- **QA 分析面板** — SystemView 新增"QA 分析"Tab：管道耗时、检索健康、LLM 统计、成本、知识缺口、当前参数。
+- **Markdown 日报** — `generateDailyReport()` 生成 QA 日报，可存档到 wiki/reports/。
+- **缺口统计** — `getGapStats()` 按主题聚合、每日趋势、已解决/未解决分布。
+
+### 工程
+
+- `report-generator.ts`：QA 日报生成器
+- `QAAnalyticsPanel.tsx`：QA 分析面板组件
+- 19 个新单元测试（token 估算、成本计算、错误分类）
+
+---
+
 ## v0.2.0 (2026-05-03)
 
 知识迭代引擎——知识库在问答中自我生长。

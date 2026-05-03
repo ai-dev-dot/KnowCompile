@@ -44,6 +44,8 @@ electron/           # 主进程（Electron main process）
   compile-validator.ts # 编译输出质量检查
   wiki-normalizer.ts # Wiki 页面规范化
   utils.ts          # 共享工具（stripThinking, extractThinking）
+  gap-store.ts      # 知识缺口持久化
+  report-generator.ts # QA 日报生成器
 src/                # 渲染进程（React）
   App.tsx           # 根组件，视图路由
   views/
