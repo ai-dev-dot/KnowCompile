@@ -30,6 +30,27 @@ import path from 'path'
 export interface QAResult {
   answer: string
   sources: { title: string; chunk_index: number; similarity: number }[]
+  suggestions?: string[]
+}
+
+/** Parse `## 建议问题` section from the answer. Returns cleaned answer + extracted suggestions. */
+function parseSuggestions(answer: string): { cleanAnswer: string; suggestions: string[] } {
+  const idx = answer.search(/##\s*建议问题/i)
+  if (idx === -1) return { cleanAnswer: answer, suggestions: [] }
+
+  const before = answer.slice(0, idx).trimEnd()
+  const after = answer.slice(idx)
+
+  const suggestions: string[] = []
+  const lines = after.split('\n')
+  for (const line of lines) {
+    const match = line.match(/^\d+[.、)\s]\s*(.+)/)
+    if (match && match[1].trim()) {
+      suggestions.push(match[1].trim())
+    }
+  }
+
+  return { cleanAnswer: before, suggestions: suggestions.slice(0, 3) }
 }
 
 interface WeightedChunk {
@@ -318,6 +339,11 @@ function buildSystemPrompt(kbPath: string, contextText: string): string {
     `2. **引用来源**：回答时注明信息来自哪个页面。使用【来源：页面标题】的格式。\n` +
     `3. **综合回答**：如果多个资料提供不同角度的信息，请综合并指出差异。\n` +
     `4. **简洁清晰**：回答直接切中要点，不绕弯子。\n\n` +
+    `在回答末尾，添加 3 个用户可能感兴趣的后续问题，格式如下：\n\n` +
+    `## 建议问题\n` +
+    `1. 问题一\n` +
+    `2. 问题二\n` +
+    `3. 问题三\n\n` +
     `---\n\n` +
     `## 参考资料\n\n${contextText}`
   )
@@ -370,12 +396,14 @@ export async function semanticQA(
     const response = await chat(allMessages, overrideSettings, { kbPath, role: 'qa' })
     m.llmMs = Math.round(performance.now() - t5)
 
+    const { cleanAnswer, suggestions } = parseSuggestions(response)
+
     m.totalMs = Math.round(performance.now() - t0)
-    m.answerLength = response.length
+    m.answerLength = cleanAnswer.length
     m.success = true
     logQAAnalytics(kbPath, { ...m, timestamp: new Date().toISOString() })
 
-    return { answer: response, sources: ctx.sources }
+    return { answer: cleanAnswer, sources: ctx.sources, suggestions }
 
   } catch (err: any) {
     m.totalMs = Math.round(performance.now() - t0)
@@ -395,6 +423,7 @@ export interface QAStreamEvent {
   token?: string
   accumulated?: string
   thinking?: string
+  suggestions?: string[]
   sources?: { title: string; chunk_index: number; similarity: number }[]
   error?: string
 }
@@ -450,11 +479,23 @@ export async function* semanticQAStream(
 
     m.llmMs = Math.round(performance.now() - t5)
     m.totalMs = Math.round(performance.now() - t0)
-    m.answerLength = (stream as any)._accumulated?.length || 0
+
+    // Parse suggestions from the final accumulated response
+    let cleanAnswer = accumulated
+    let suggestions: string[] = []
+    // Get final accumulated from the last token — use the loop variable
+    if (accumulated) {
+      const parsed = parseSuggestions(accumulated)
+      cleanAnswer = parsed.cleanAnswer
+      suggestions = parsed.suggestions
+    }
+
+    // TODO: re-yield the clean answer? For now the streaming frontend will re-parse
+    m.answerLength = cleanAnswer.length
     m.success = true
     logQAAnalytics(kbPath, { ...m, timestamp: new Date().toISOString() })
 
-    yield { type: 'done', sources: ctx.sources }
+    yield { type: 'done', sources: ctx.sources, suggestions, accumulated: cleanAnswer }
 
   } catch (err: any) {
     if (err?.name === 'AbortError' || signal?.aborted) {

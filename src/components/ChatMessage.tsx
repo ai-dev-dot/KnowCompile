@@ -10,6 +10,8 @@ interface Props {
   role: 'user' | 'assistant'
   content: string
   thinking?: string
+  suggestions?: string[]
+  onSuggestionClick?: (question: string) => void
   sources?: Source[]
   msgIndex?: number
   onFeedback?: (type: 'helpful' | 'inaccurate' | 'more_detail') => void
@@ -20,7 +22,7 @@ interface Props {
   partial?: boolean
 }
 
-export default function ChatMessage({ role, content, thinking, sources, msgIndex, onFeedback, feedbackState, onArchive, archived, partial }: Props) {
+export default function ChatMessage({ role, content, thinking, suggestions, onSuggestionClick, sources, msgIndex, onFeedback, feedbackState, onArchive, archived, partial }: Props) {
   return (
     <div className={`flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`max-w-[80%] rounded-xl px-4 py-3 ${
@@ -60,6 +62,24 @@ export default function ChatMessage({ role, content, thinking, sources, msgIndex
                 </li>
               ))}
             </ol>
+          </div>
+        )}
+
+        {/* Suggested follow-up questions */}
+        {role === 'assistant' && suggestions && suggestions.length > 0 && onSuggestionClick && (
+          <div className="mt-2 pt-2 border-t border-gray-700">
+            <span className="text-xs text-text-muted mb-1 block">继续提问：</span>
+            <div className="flex flex-wrap gap-1.5">
+              {suggestions.map((q, i) => (
+                <button
+                  key={i}
+                  onClick={() => onSuggestionClick(q)}
+                  className="text-xs px-2 py-1 rounded bg-accent/10 text-accent hover:bg-accent/20 transition-colors text-left"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

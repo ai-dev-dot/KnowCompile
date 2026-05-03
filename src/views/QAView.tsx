@@ -13,6 +13,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   thinking?: string
+  suggestions?: string[]
   sources?: Source[]
   archived?: boolean
   feedback?: 'helpful' | 'inaccurate' | 'more_detail'
@@ -142,6 +143,13 @@ export default function QAView({ kbPath }: Props) {
       setStreamingToken('')
       abortRef.current = null
 
+      if (data.suggestions && data.suggestions.length > 0) {
+        // Strip suggestions section from the displayed content
+        const idx = (data.accumulated || '').search(/##\s*建议问题/i)
+        if (idx !== -1) {
+          data.accumulated = (data.accumulated || '').slice(0, idx).trimEnd()
+        }
+      }
       if (data.error) {
         // Partial answer — show what we have + error banner
         const partialContent = data.accumulated || tokenBufferRef.current
@@ -162,6 +170,7 @@ export default function QAView({ kbPath }: Props) {
           role: 'assistant',
           content,
           thinking: data.thinking,
+          suggestions: data.suggestions,
           sources: data.sources || [],
         }])
         // Refresh conversation list (title may have updated)
@@ -271,6 +280,8 @@ export default function QAView({ kbPath }: Props) {
                   role={msg.role}
                   content={msg.content}
                   thinking={msg.thinking}
+                  suggestions={msg.suggestions}
+                  onSuggestionClick={(q) => { setInput(q); /* will auto-focus input */ }}
                   sources={msg.sources}
                   msgIndex={i}
                   archived={msg.archived}

@@ -968,16 +968,18 @@ ${answer}
             thinking: ev.thinking,
           })
         } else if (ev.type === 'done') {
-          // Save assistant message
+          // Save assistant message (use cleaned answer if suggestions were parsed)
+          const finalContent = ev.accumulated || accumulated
           addMessage(kbPath, activeConvId, {
             role: 'assistant',
-            content: accumulated,
+            content: finalContent,
             sources: ev.sources,
           })
           event.sender.send('qa:token-end', {
             requestId,
             sources: ev.sources,
-            accumulated,
+            accumulated: finalContent,
+            suggestions: ev.suggestions,
             thinking: ev.thinking,
             convId: activeConvId,
           })
