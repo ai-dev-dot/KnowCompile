@@ -7,6 +7,42 @@ import { loadSchemaPrompt } from './schema-loader'
 import { logLLMInteraction, type LLMLogEntry } from './llm-logger'
 import { stripThinking, extractThinking } from './utils'
 
+// ---------------------------------------------------------------------------
+// Token + cost estimation (估算值，仅供参考)
+// ---------------------------------------------------------------------------
+
+/** Rough token estimate: Chinese chars / 2 ≈ tokens. */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 2)
+}
+
+/** Price per 1M tokens (input / output). Updated May 2026. */
+const MODEL_PRICES: Record<string, { input: number; output: number }> = {
+  'claude-sonnet-4-20250514': { input: 3, output: 15 },
+  'claude-opus-4-20250514':   { input: 15, output: 75 },
+  'claude-haiku-4-5-20251001': { input: 0.80, output: 4 },
+  'gpt-4o':                   { input: 2.5, output: 10 },
+  'gpt-4o-mini':              { input: 0.15, output: 0.60 },
+  // default for unknown models
+  'default':                  { input: 1, output: 5 },
+}
+
+function estimateCost(model: string, promptTokens: number, responseTokens: number): number {
+  const price = MODEL_PRICES[model] || MODEL_PRICES['default']
+  return (promptTokens / 1_000_000) * price.input + (responseTokens / 1_000_000) * price.output
+}
+
+function categorizeError(err: Error | undefined, signal?: AbortSignal): LLMLogEntry['errorCategory'] {
+  if (!err) return undefined
+  const msg = err.message || ''
+  if (signal?.aborted || err.name === 'AbortError') return undefined // not an error
+  if (/timeout|timed out|ETIMEDOUT/i.test(msg)) return 'timeout'
+  if (/rate.?limit|429|too many requests/i.test(msg)) return 'rate_limit'
+  if (/unauthorized|invalid.*key|auth|401|403/i.test(msg)) return 'auth'
+  if (/network|fetch|ECONN|ENOTFOUND|DNS/i.test(msg)) return 'network'
+  return 'other'
+}
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
@@ -15,7 +51,7 @@ export interface ChatMessage {
 interface RunLLMParams {
   messages: ChatMessage[]
   overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string }
-  logInfo?: { kbPath: string; role: LLMLogEntry['role'] }
+  logInfo?: { kbPath: string; role: LLMLogEntry['role']; qaSessionId?: string }
   signal?: AbortSignal
 }
 
@@ -77,8 +113,11 @@ async function runLLM(params: RunLLMParams): Promise<string> {
 
   if (params.logInfo?.kbPath) {
     const lastUserMsg = [...params.messages].reverse().find(m => m.role === 'user')
+    const promptTokens = estimateTokens(params.messages.reduce((sum, m) => sum + m.content.length, 0))
+    const responseTokens = estimateTokens(response.length)
     logLLMInteraction(params.logInfo.kbPath, {
       timestamp: new Date().toISOString(),
+      qaSessionId: params.logInfo.qaSessionId,
       model: settings.model,
       provider: settings.provider,
       role: params.logInfo.role,
@@ -89,6 +128,10 @@ async function runLLM(params: RunLLMParams): Promise<string> {
       durationMs: Date.now() - startTime,
       success,
       error: errorMsg,
+      errorCategory: success ? undefined : categorizeError(new Error(errorMsg || ''), params.signal),
+      promptTokens,
+      responseTokens,
+      costEstimate: estimateCost(settings.model, promptTokens, responseTokens),
     })
   }
 
@@ -204,8 +247,11 @@ export async function* chatStream(
   // Log the full interaction
   if (logInfo?.kbPath) {
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
+    const promptTokens = estimateTokens(messages.reduce((sum, m) => sum + m.content.length, 0))
+    const responseTokens = estimateTokens(accumulated.length)
     logLLMInteraction(logInfo.kbPath, {
       timestamp: new Date().toISOString(),
+      qaSessionId: logInfo.qaSessionId,
       model: settings.model,
       provider: settings.provider,
       role: logInfo.role,
@@ -216,6 +262,10 @@ export async function* chatStream(
       durationMs: Date.now() - startTime,
       success,
       error: errorMsg,
+      errorCategory: success ? undefined : categorizeError(new Error(errorMsg || ''), signal),
+      promptTokens,
+      responseTokens,
+      costEstimate: estimateCost(settings.model, promptTokens, responseTokens),
     })
   }
 

@@ -17,7 +17,7 @@ import { EmbeddingService } from './embedding-service'
 import { chat, chatStream } from './llm-service'
 import type { ChatMessage } from './llm-service'
 import { distanceToSimilarity } from './vector-utils'
-import { logQAAnalytics, QAStepMetrics } from './qa-analytics'
+import { logQAAnalytics, QAStepMetrics, FeedbackWeightRecord } from './qa-analytics'
 import { search as keywordSearch } from './search-indexer'
 import { rewriteQuery } from './query-rewriter'
 import { logGap } from './gap-store'
@@ -68,6 +68,7 @@ export interface ContextResult {
   contextText: string
   sources: { title: string; chunk_index: number; similarity: number }[]
   topChunks: WeightedChunk[]
+  feedbackWeightsApplied?: FeedbackWeightRecord[]
   metrics: Pick<QAStepMetrics,
     'embeddingMs' | 'embeddingDim' | 'searchMs' | 'retrievalCount' |
     'rawResultCount' | 'distanceStats' | 'filterRerankMs' | 'similarityThreshold' |
@@ -216,6 +217,7 @@ export async function buildContext(
 
   // Build feedback scores: aggregate per source page title
   const feedbackScores = new Map<string, number>()
+  const feedbackWeightsApplied: FeedbackWeightRecord[] = []
   try {
     const convs = listConversations(kbPath)
     const pageStats = new Map<string, { helpful: number; inaccurate: number }>()
@@ -232,8 +234,13 @@ export async function buildContext(
       }
     }
     for (const [title, stats] of pageStats) {
-      if (stats.helpful >= 3) feedbackScores.set(title, 1.3)
-      else if (stats.inaccurate >= 1) feedbackScores.set(title, 0.7)
+      if (stats.helpful >= 3) {
+        feedbackScores.set(title, 1.3)
+        feedbackWeightsApplied.push({ sourcePage: title, multiplier: 1.3, reason: `≥3 helpful (${stats.helpful})` })
+      } else if (stats.inaccurate >= 1) {
+        feedbackScores.set(title, 0.7)
+        feedbackWeightsApplied.push({ sourcePage: title, multiplier: 0.7, reason: `≥1 inaccurate (${stats.inaccurate})` })
+      }
     }
   } catch { /* feedback aggregation is best-effort */ }
 
@@ -347,7 +354,7 @@ export async function buildContext(
   }
   m.sourceCount = sources.length
 
-  return { contextText, sources, topChunks, metrics: m }
+  return { contextText, sources, topChunks, feedbackWeightsApplied: feedbackWeightsApplied.length > 0 ? feedbackWeightsApplied : undefined, metrics: m }
 }
 
 // ---------------------------------------------------------------------------
@@ -395,12 +402,15 @@ export async function semanticQA(
   conversationHistory?: ChatMessage[],
 ): Promise<QAResult> {
   const t0 = performance.now()
+  const qaSessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
   const ctx = await buildContext(question, kbPath, embedding, db, vdb)
 
   const m: QAStepMetrics = {
     ...ctx.metrics,
+    qaSessionId,
     llmMs: 0,
     totalMs: 0, question, answerLength: 0, success: false,
+    feedbackWeightsApplied: ctx.feedbackWeightsApplied,
   }
 
   try {
@@ -417,7 +427,6 @@ export async function semanticQA(
     const allMessages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
     ]
-    // Inject conversation history before the current question
     if (conversationHistory && conversationHistory.length > 0) {
       for (const msg of conversationHistory) {
         allMessages.push(msg)
@@ -425,14 +434,14 @@ export async function semanticQA(
     }
     allMessages.push({ role: 'user', content: `问题：${question}` })
 
-    const response = await chat(allMessages, overrideSettings, { kbPath, role: 'qa' })
+    const response = await chat(allMessages, overrideSettings, { kbPath, role: 'qa', qaSessionId })
     m.llmMs = Math.round(performance.now() - t5)
 
     const { cleanAnswer, suggestions } = parseSuggestions(response)
 
     // Knowledge gap detection
     if (ctx.contextText === '' || /(未找到|无法回答|未提供|不相关).*信息/i.test(cleanAnswer)) {
-      logGap(kbPath, question)
+      logGap(kbPath, question, qaSessionId)
     }
 
     // LLM-based archive suggestion (lightweight check)
@@ -597,12 +606,15 @@ export async function* semanticQAStream(
   signal?: AbortSignal,
 ): AsyncGenerator<QAStreamEvent, void, undefined> {
   const t0 = performance.now()
+  const qaSessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
   const ctx = await buildContext(question, kbPath, embedding, db, vdb)
 
   const m: QAStepMetrics = {
     ...ctx.metrics,
+    qaSessionId,
     llmMs: 0,
     totalMs: 0, question, answerLength: 0, success: false,
+    feedbackWeightsApplied: ctx.feedbackWeightsApplied,
   }
 
   try {
@@ -627,7 +639,7 @@ export async function* semanticQAStream(
     }
     allMessages.push({ role: 'user', content: `问题：${question}` })
 
-    const stream = chatStream(allMessages, overrideSettings, { kbPath, role: 'qa' }, signal)
+    const stream = chatStream(allMessages, overrideSettings, { kbPath, role: 'qa', qaSessionId }, signal)
     for await (const st of stream) {
       if (signal?.aborted) break
       if (st.token) {
@@ -649,7 +661,7 @@ export async function* semanticQAStream(
 
     // Knowledge gap detection
     if (ctx.contextText === '' || /(未找到|无法回答|未提供|不相关).*信息/i.test(cleanAnswer)) {
-      logGap(kbPath, question)
+      logGap(kbPath, question, qaSessionId)
     }
 
     // LLM-based archive suggestion

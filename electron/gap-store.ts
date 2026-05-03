@@ -10,6 +10,7 @@ import path from 'path'
 
 export interface KnowledgeGap {
   id: string
+  qaSessionId?: string  // v0.2.1: which QA session triggered this gap
   question: string
   topic?: string
   createdAt: string
@@ -27,10 +28,11 @@ function ensureDir(kbPath: string): void {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 }
 
-export function logGap(kbPath: string, question: string): KnowledgeGap {
+export function logGap(kbPath: string, question: string, qaSessionId?: string): KnowledgeGap {
   ensureDir(kbPath)
   const gap: KnowledgeGap = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    qaSessionId,
     question,
     createdAt: new Date().toISOString(),
     resolved: false,
@@ -64,6 +66,36 @@ export function deleteGap(kbPath: string, gapId: string): boolean {
   if (filtered.length === gaps.length) return false
   fs.writeFileSync(gapsPath(kbPath), filtered.map(g => JSON.stringify(g)).join('\n') + '\n', 'utf-8')
   return true
+}
+
+export interface GapStats {
+  total: number
+  unresolved: number
+  resolved: number
+  byTopic: { topic: string; count: number }[]
+  recentGaps: KnowledgeGap[]
+}
+
+export function getGapStats(kbPath: string): GapStats {
+  const gaps = listGaps(kbPath)
+  const unresolved = gaps.filter(g => !g.resolved)
+  const byTopic = new Map<string, number>()
+  for (const g of gaps) {
+    const topic = g.topic || extractGapTopic(g.question)
+    byTopic.set(topic, (byTopic.get(topic) || 0) + 1)
+  }
+  const sortedTopics = [...byTopic.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([topic, count]) => ({ topic, count }))
+
+  return {
+    total: gaps.length,
+    unresolved: unresolved.length,
+    resolved: gaps.length - unresolved.length,
+    byTopic: sortedTopics,
+    recentGaps: unresolved.slice(0, 20),
+  }
 }
 
 /** Compute a simple topic from the question for grouping. */
