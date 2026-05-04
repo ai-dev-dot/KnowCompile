@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.2.2 (2026-05-04)
+
+渲染层测试基础设施建设——React 组件测试从 0 到 45 个用例。
+
+### 新增
+
+- **渲染层测试** — 5 个新测试文件，45 个 test case，覆盖纯函数和 React 组件。
+- **IPC mock 工厂** — `createMockIPC()` 覆盖 40+ 个 IPC 通道，每个通道默认返回合理值，支持 per-test 定制。
+- **jsdom 测试环境** — vitest 双环境（node + jsdom），后端测试和渲染层测试在同一个 `npm test` 中运行。
+
+### 工程
+
+- `src/test-utils/mock-ipc.ts`：IPC mock 工厂
+- `src/test-utils/render.tsx`：组件测试渲染入口（自动 stub `window.electronAPI`）
+- `src/test-utils/setup.ts`：DOM 匹配器注册
+- 导出 `stripLeadingFrontmatter`、`convertWikiLinks` 为可测试的纯函数
+- 45 个新测试：`stripThinking`/`extractThinking`（11）、MarkdownRenderer 纯函数（10）、IconSidebar（4）、PageList（6）、ChatMessage（14）
+
+---
+
 ## v0.2.1 (2026-05-03)
 
 统一日志和可观测性——评估 AI 问答的每个环节。

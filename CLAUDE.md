@@ -21,3 +21,22 @@ office-hours, plan-ceo-review, plan-eng-review, plan-design-review,
 plan-devex-review, autoplan, investigate, qa, qa-only, review (gstack),
 design-review, devex-review, design-consultation, ship, land-and-deploy,
 canary, cso, context-save, context-restore, browse, retro, learn
+
+## Project: KnowCompile
+
+Electron 桌面应用 — AI 资料编译为结构化 Wiki。
+
+**技术栈:** Electron + React 19 + TypeScript + Vite + Tailwind CSS + SQLite + LanceDB
+
+**命令:**
+- `npm run dev` — Vite 开发服务器 + Electron
+- `npm test` / `npx vitest run` — 全量测试（后端 node + 渲染层 jsdom）
+- `npx vitest run src/` — 仅渲染层测试（jsdom + @testing-library/react）
+
+**测试架构:**
+- `tests/` — 后端测试，node 环境（229 个通过）
+- `src/*.test.{ts,tsx}` — 渲染层测试，jsdom 环境（45 个通过）
+- `src/test-utils/mock-ipc.ts` — IPC mock 工厂，覆盖 40+ 通道
+- `src/test-utils/render.tsx` — 组件测试入口，自动 stub window.electronAPI
+
+**关键模式:** 组件测试不依赖 Electron；mock IPC 工厂为每个组件提供隔离的 IPC 模拟

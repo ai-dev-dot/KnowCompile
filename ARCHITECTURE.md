@@ -5,7 +5,7 @@
 | 层 | 选型 |
 |----|------|
 | 桌面框架 | Electron |
-| 前端 | React 18 + Tailwind CSS + Vite |
+| 前端 | React 19 + Tailwind CSS + Vite |
 | 主进程 | TypeScript + Node.js |
 | LLM 接口 | Anthropic SDK / OpenAI SDK（用户配置 Key） |
 | 向量数据库 | LanceDB（嵌入式） |
@@ -54,14 +54,21 @@ src/                # 渲染进程（React）
     WikiView.tsx    # Wiki 浏览界面
     SettingsView.tsx # 设置界面
     GraphView.tsx   # 知识图谱界面
-    DiagnosticsView.tsx # 系统诊断界面
+    SystemView.tsx  # 系统诊断界面
+    LogViewer.tsx   # 日志查看界面
   components/
     ChatMessage.tsx    # 聊天气泡（Markdown + 引用 + 反馈）
     ConversationList.tsx # 会话列表侧边栏
     MarkdownRenderer.tsx # Markdown 渲染（react-markdown）
+    IconSidebar.tsx    # 导航侧边栏
+    PageList.tsx       # 页面列表
   hooks/
     useIPC.ts       # IPC 类型化封装
-tests/              # 测试
+  test-utils/        # 渲染层测试工具
+    mock-ipc.ts     # IPC mock 工厂
+    render.tsx      # jsdom 渲染入口
+    setup.ts        # DOM 匹配器注册
+tests/              # 后端测试
   helpers/
     llm-setup.ts    # LLM 测试凭证加载
 ```

@@ -31,6 +31,7 @@ npx vitest run tests/qa-pipeline.test.ts --test-timeout=300000
 | 类型 | 文件 | 需要 LLM API？ | 需要 embedding 模型？ |
 |------|------|:---:|:---:|
 | 单元测试 | `index-db`, `llm-logger`, `vector-db`, `exporter`, `embedding-service`, `search-indexer`, `compile-validator`, `wiki-normalizer`, `kb-init`, `qa-service` | 否 | 部分 |
+| 渲染层测试 | `src/electron-utils`, `src/components/*` | 否 | 否 |
 | LLM 集成 | `llm-service`, `compile-service` | 是 | 否 |
 | 管道集成 | `compile-pipeline`, `qa-pipeline` | 是 | 是（bge-m3 ~568MB） |
 
