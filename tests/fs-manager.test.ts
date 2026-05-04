@@ -16,6 +16,8 @@ import {
   extractBacklinks,
   extractLinks,
   getSchemaFiles,
+  validateRawFile,
+  readRawContent,
 } from '../electron/fs-manager'
 
 describe('FSManager', () => {
@@ -172,5 +174,73 @@ describe('FSManager', () => {
 
   it('17. returns empty array when schema dir does not exist', () => {
     expect(getSchemaFiles(tmpDir)).toEqual([])
+  })
+
+  // -- validateRawFile --
+  it('18. accepts .md files', () => {
+    const p = path.join(tmpDir, 'test.md')
+    fs.writeFileSync(p, 'hello', 'utf-8')
+    expect(validateRawFile(tmpDir, p).valid).toBe(true)
+  })
+
+  it('19. accepts .pdf files', () => {
+    const p = path.join(tmpDir, 'test.pdf')
+    fs.writeFileSync(p, '%PDF-1.4 dummy', 'utf-8')
+    expect(validateRawFile(tmpDir, p).valid).toBe(true)
+  })
+
+  it('20. rejects unsupported format (.exe)', () => {
+    const p = path.join(tmpDir, 'test.exe')
+    fs.writeFileSync(p, 'binary', 'utf-8')
+    const result = validateRawFile(tmpDir, p)
+    expect(result.valid).toBe(false)
+    expect(result.code).toBe('unsupported_format')
+  })
+
+  it('21. rejects files over 50MB', () => {
+    const p = path.join(tmpDir, 'huge.md')
+    const fd = fs.openSync(p, 'w')
+    fs.ftruncateSync(fd, 51 * 1024 * 1024)
+    fs.closeSync(fd)
+    const result = validateRawFile(tmpDir, p)
+    expect(result.valid).toBe(false)
+    expect(result.code).toBe('too_large')
+  })
+
+  it('22. detects duplicate files in raw/', () => {
+    const p = path.join(tmpDir, 'dup.md')
+    fs.writeFileSync(p, 'source', 'utf-8')
+    const rawDir = path.join(tmpDir, 'raw')
+    fs.mkdirSync(rawDir, { recursive: true })
+    fs.writeFileSync(path.join(rawDir, 'dup.md'), 'existing', 'utf-8')
+    const result = validateRawFile(tmpDir, p)
+    expect(result.valid).toBe(false)
+    expect(result.code).toBe('duplicate')
+  })
+
+  it('23. returns error for non-existent source file', () => {
+    const result = validateRawFile(tmpDir, path.join(tmpDir, 'ghost.md'))
+    expect(result.valid).toBe(false)
+  })
+
+  // -- copyToRaw error paths --
+  it('24. returns error for non-existent source (ENOENT)', () => {
+    const result = copyToRaw(tmpDir, path.join(tmpDir, 'nonexistent.md'))
+    expect(result.success).toBe(false)
+    expect(result.error).toBeDefined()
+  })
+
+  // -- readRawContent --
+  it('25. reads content of a raw file', () => {
+    const rawDir = path.join(tmpDir, 'raw')
+    fs.mkdirSync(rawDir, { recursive: true })
+    fs.writeFileSync(path.join(rawDir, 'hello.md'), '# Hello\n\nWorld', 'utf-8')
+    const content = readRawContent(tmpDir, 'hello.md')
+    expect(content).toContain('# Hello')
+    expect(content).toContain('World')
+  })
+
+  it('26. throws for non-existent raw file', () => {
+    expect(() => readRawContent(tmpDir, 'nope.md')).toThrow()
   })
 })
