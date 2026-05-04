@@ -90,8 +90,10 @@ export default function App() {
 
   if (phase === 'init') {
     return (
-      <div className="h-screen flex items-center justify-center bg-surface">
-        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+      <div className="h-screen flex items-center justify-center bg-[#1e1e2e]">
+        <div className="w-9 h-9 rounded-xl border border-[#cba6f7]/30 flex items-center justify-center">
+          <div className="w-4 h-4 border border-[#cba6f7] border-t-transparent rounded-full animate-spin" />
+        </div>
       </div>
     )
   }
@@ -107,19 +109,19 @@ export default function App() {
 
     if (allDone) {
       return (
-        <div className="h-screen flex flex-col items-center justify-center bg-surface gap-8">
+        <div className="h-screen flex flex-col items-center justify-center bg-[#1e1e2e] gap-8">
           <div className="text-center">
-            <p className="text-text text-xl font-medium mb-1">正在进入应用</p>
-            <p className="text-text-muted text-sm">所有资源加载完成，即将进入...</p>
+            <p className="text-[#cdd6f4] text-xl font-medium mb-1">正在进入应用</p>
+            <p className="text-[#6e6e8a] text-sm">所有资源加载完成，即将进入...</p>
           </div>
           <div className="space-y-3 w-72">
             {steps.map(s => {
               return (
                 <div key={s.n} className="flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-green-500 text-white">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-[#4ade80] text-white">
                     ✓
                   </div>
-                  <span className="text-sm text-green-400">{s.label}</span>
+                  <span className="text-sm text-[#4ade80]">{s.label}</span>
                 </div>
               )
             })}
@@ -129,10 +131,10 @@ export default function App() {
     }
 
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-surface gap-8">
+      <div className="h-screen flex flex-col items-center justify-center bg-[#1e1e2e] gap-8">
         <div className="text-center">
-          <p className="text-text text-xl font-medium mb-1">正在启动应用</p>
-          <p className="text-text-muted text-sm">正在加载各类资源，请稍候...</p>
+          <p className="text-[#cdd6f4] text-xl font-medium mb-1">正在启动应用</p>
+          <p className="text-[#6e6e8a] text-sm">正在加载各类资源，请稍候...</p>
         </div>
         <div className="space-y-3 w-72">
           {steps.map(s => {
@@ -141,13 +143,13 @@ export default function App() {
             return (
               <div key={s.n} className="flex items-center gap-3">
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold
-                  ${isDone ? 'bg-green-500 text-white' : isActive ? 'bg-accent text-gray-950 animate-pulse' : 'bg-gray-700 text-gray-400'}`}>
+                  ${isDone ? 'bg-[#4ade80] text-white' : isActive ? 'bg-[#cba6f7] text-[#1e1e2e] animate-pulse' : 'bg-[#3a3a4a] text-[#6e6e8a]'}`}>
                   {isDone ? '✓' : s.n}
                 </div>
-                <span className={`text-sm ${isDone ? 'text-green-400' : isActive ? 'text-text' : 'text-text-muted'}`}>
+                <span className={`text-sm ${isDone ? 'text-[#4ade80]' : isActive ? 'text-[#cdd6f4]' : 'text-[#6e6e8a]'}`}>
                   {s.label}
                 </span>
-                {isActive && preload.detail && <span className="text-xs text-text-muted ml-1">— {preload.detail}</span>}
+                {isActive && preload.detail && <span className="text-xs text-[#6e6e8a] ml-1">— {preload.detail}</span>}
               </div>
             )
           })}
@@ -166,7 +168,7 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen flex bg-surface overflow-hidden">
+    <div className="h-screen flex bg-[#1e1e2e] overflow-hidden">
       <IconSidebar active={activeView} onChange={setActiveView} />
       <div className="flex-1 flex overflow-hidden">
         <div className={activeView === 'wiki' ? 'flex flex-1 overflow-hidden' : 'hidden'}><WikiView kbPath={kbPath} active={activeView === 'wiki'} /></div>

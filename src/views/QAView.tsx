@@ -295,9 +295,13 @@ export default function QAView({ kbPath }: Props) {
           {messages.length === 0 && !streaming ? (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
-                <p className="text-4xl mb-4">💬</p>
-                <p className="text-text text-lg mb-2">AI 问答</p>
-                <p className="text-text-muted text-sm">选择左侧对话或创建新对话开始提问</p>
+                <div className="w-16 h-16 rounded-2xl bg-[#181825] border border-[#313244] flex items-center justify-center mx-auto mb-5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#6e6e8a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </div>
+                <p className="text-[#cdd6f4] text-lg mb-1 font-medium">AI 问答</p>
+                <p className="text-[#6e6e8a] text-sm">选择左侧对话或创建新对话开始提问</p>
               </div>
             </div>
           ) : (
@@ -329,16 +333,16 @@ export default function QAView({ kbPath }: Props) {
           {/* Streaming token display */}
           {streaming && streamingToken && (
             <div className="flex justify-start mb-4">
-              <div className="max-w-[80%] rounded-xl px-4 py-3 bg-gray-800 text-text">
+              <div className="max-w-[80%] rounded-2xl px-4 py-3 bg-[#181825] border border-[#2a2a3e] text-text">
                 {streamingThinking && (
                   <details className="mb-2 text-xs" open>
-                    <summary className="text-text-muted cursor-pointer hover:text-text">推理过程</summary>
-                    <pre className="mt-1 whitespace-pre-wrap text-text-muted/70 border-l-2 border-gray-600 pl-2">{streamingThinking}</pre>
+                    <summary className="text-[#6e6e8a] cursor-pointer hover:text-[#a6adc8]">推理过程</summary>
+                    <pre className="mt-1 whitespace-pre-wrap text-[#6e6e8a]/70 border-l-2 border-[#3a3a4a] pl-2">{streamingThinking}</pre>
                   </details>
                 )}
                 <div className="text-sm max-w-none prose prose-invert">
                   {streamingToken}
-                  <span className="inline-block w-1.5 h-4 bg-accent ml-0.5 animate-pulse align-text-bottom" />
+                  <span className="inline-block w-1 h-4 bg-[#cba6f7] ml-0.5 animate-pulse align-text-bottom" />
                 </div>
               </div>
             </div>
@@ -347,7 +351,7 @@ export default function QAView({ kbPath }: Props) {
           {/* Streaming loading (before first token) */}
           {streaming && !streamingToken && (
             <div className="flex justify-start mb-4">
-              <div className="bg-gray-800 rounded-xl px-4 py-3 text-text-muted">
+              <div className="bg-[#181825] border border-[#2a2a3e] rounded-2xl px-4 py-3 text-[#6e6e8a]">
                 <span className="animate-pulse">思考中...</span>
               </div>
             </div>
@@ -356,7 +360,7 @@ export default function QAView({ kbPath }: Props) {
           {/* Error banner */}
           {streamingError && (
             <div className="flex justify-start mb-4">
-              <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-2 text-sm text-red-300 flex items-center gap-3">
+              <div className="bg-red-900/20 border border-red-900/30 rounded-xl px-4 py-2 text-sm text-red-400 flex items-center gap-3">
                 <span>网络中断，回答不完整</span>
                 <button
                   onClick={() => {
@@ -377,7 +381,7 @@ export default function QAView({ kbPath }: Props) {
         </div>
 
         {/* Input bar */}
-        <div className="p-4 border-t border-border">
+        <div className="p-4 border-t border-[#313244]">
           <div className="flex gap-3 max-w-3xl mx-auto">
             <input
               value={input}
@@ -387,13 +391,13 @@ export default function QAView({ kbPath }: Props) {
                 if (e.key === 'Escape' && streaming) handleStop()
               }}
               placeholder="基于 Wiki 知识库提问..."
-              className="flex-1 bg-gray-800 text-text rounded-lg px-4 py-2.5 outline-none focus:ring-2 focus:ring-accent text-sm"
+              className="flex-1 bg-[#181825] text-[#cdd6f4] rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-[#cba6f7] text-sm border border-[#313244] placeholder:text-[#3a3a4a]"
               disabled={streaming && !!streamingToken}
             />
             {streaming ? (
               <button
                 onClick={handleStop}
-                className="px-5 py-2.5 bg-red-700 text-white rounded-lg font-medium text-sm hover:bg-red-600 transition-colors"
+                className="px-5 py-2.5 bg-[#cba6f7] text-[#1e1e2e] rounded-xl font-medium text-sm hover:opacity-90 disabled:opacity-50 transition-all"
               >
                 停止
               </button>
@@ -401,7 +405,7 @@ export default function QAView({ kbPath }: Props) {
               <button
                 onClick={handleSend}
                 disabled={!input.trim()}
-                className="px-5 py-2.5 bg-accent text-gray-950 rounded-lg font-medium text-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
+                className="px-5 py-2.5 bg-[#cba6f7] text-[#1e1e2e] rounded-xl font-medium text-sm hover:opacity-90 disabled:opacity-40 transition-all"
               >
                 发送
               </button>

@@ -13,7 +13,7 @@ describe('IngestInput', () => {
     const onTextPaste = vi.fn()
     render(<IngestInput onFilesDrop={() => {}} onTextPaste={onTextPaste} onURLSubmit={() => {}} />)
 
-    fireEvent.click(screen.getByText('粘贴文本'))
+    fireEvent.click(screen.getByRole('button', { name: /粘贴文本/ }))
     const textarea = document.querySelector('textarea')!
     fireEvent.change(textarea, { target: { value: '# 测试文本' } })
     fireEvent.click(screen.getByText('导入文本'))
@@ -24,7 +24,7 @@ describe('IngestInput', () => {
   it('shows URL input form and disables submit when empty', () => {
     render(<IngestInput onFilesDrop={() => {}} onTextPaste={() => {}} onURLSubmit={() => {}} />)
 
-    fireEvent.click(screen.getByText('网页链接'))
+    fireEvent.click(screen.getByRole('button', { name: /网页链接/ }))
     const submitBtn = screen.getByText('抓取网页')
     expect(submitBtn.closest('button')!.disabled).toBe(true)
   })
@@ -33,7 +33,7 @@ describe('IngestInput', () => {
     const onURLSubmit = vi.fn()
     render(<IngestInput onFilesDrop={() => {}} onTextPaste={() => {}} onURLSubmit={onURLSubmit} />)
 
-    fireEvent.click(screen.getByText('网页链接'))
+    fireEvent.click(screen.getByRole('button', { name: /网页链接/ }))
     const input = document.querySelector('input[type="url"]')!
     fireEvent.change(input, { target: { value: 'https://example.com' } })
     fireEvent.click(screen.getByText('抓取网页'))
@@ -43,8 +43,8 @@ describe('IngestInput', () => {
 
   it('tab buttons are rendered', () => {
     render(<IngestInput onFilesDrop={() => {}} onTextPaste={() => {}} onURLSubmit={() => {}} />)
-    expect(screen.getByText('拖放文件')).toBeDefined()
-    expect(screen.getByText('粘贴文本')).toBeDefined()
-    expect(screen.getByText('网页链接')).toBeDefined()
+    expect(screen.getByRole('button', { name: /拖放文件/ })).toBeDefined()
+    expect(screen.getByRole('button', { name: /粘贴文本/ })).toBeDefined()
+    expect(screen.getByRole('button', { name: /网页链接/ })).toBeDefined()
   })
 })

@@ -89,7 +89,11 @@ export default function IngestView({ kbPath, active }: Props) {
     <div className="flex flex-1 overflow-hidden">
       {/* Main area */}
       <main className="flex-1 p-8 overflow-y-auto">
-        <h2 className="text-xl font-semibold text-text mb-6">资料摄入</h2>
+        {/* Hero header */}
+        <div className="mb-8 pb-6 border-b border-[#313244]">
+          <h2 className="text-2xl font-bold text-[#cdd6f4] mb-1 tracking-tight">资料摄入</h2>
+          <p className="text-[#6e6e8a] text-sm">{files.length} 个文档已导入</p>
+        </div>
 
         <IngestInput
           onFilesDrop={handleFilesDrop}
@@ -98,15 +102,15 @@ export default function IngestView({ kbPath, active }: Props) {
         />
 
         {status && (
-          <div className={`mt-4 p-3 rounded-lg text-sm ${
-            status.includes('失败') ? 'bg-red-900/20 text-red-300' : 'bg-accent/10 text-accent'
+          <div className={`mt-4 p-3 rounded-xl text-sm ${
+            status.includes('失败') ? 'bg-red-900/20 text-red-400 border border-red-900/30' : 'bg-[#cba6f7]/10 text-[#cba6f7] border border-[#cba6f7]/20'
           }`}>
             {status}
           </div>
         )}
 
         <div className="mt-8">
-          <h3 className="text-sm font-semibold text-text-muted mb-3">已导入的资料 ({files.length})</h3>
+          <h3 className="text-sm font-semibold text-[#6e6e8a] mb-3 uppercase tracking-wide">已导入的资料</h3>
           <RawFileList
             kbPath={kbPath}
             files={files}

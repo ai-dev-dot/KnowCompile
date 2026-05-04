@@ -26,10 +26,10 @@ interface Props {
 export default function ChatMessage({ role, content, thinking, suggestions, onSuggestionClick, sources, msgIndex, onFeedback, feedbackState, onArchive, archived, suggestArchive, partial }: Props) {
   return (
     <div className={`flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
-      <div className={`max-w-[80%] rounded-xl px-4 py-3 ${
+      <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${
         role === 'user'
-          ? 'bg-accent/30 border border-accent/40 text-text'
-          : 'bg-gray-800 text-text'
+          ? 'bg-[#252535] border border-[#cba6f7]/30 text-text'
+          : 'bg-[#181825] border border-[#2a2a3e] text-text'
       }`}>
         {/* Thinking/reasoning display */}
         {role === 'assistant' && thinking && (
