@@ -1,25 +1,40 @@
 import { useState, useCallback, useRef } from 'react'
 
+export interface FileEntry {
+  /** Absolute path on disk (source for copy) */
+  absolutePath: string
+  /** Filename */
+  relativePath: string
+}
+
 interface Props {
-  onFilesDrop: (paths: string[]) => void
+  onFilesDrop: (entries: FileEntry[]) => void
 }
 
 export default function DropZone({ onFilesDrop }: Props) {
   const [dragging, setDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const extractPaths = useCallback((files: FileList) => {
-    const paths = Array.from(files)
-      .map(f => window.electronAPI.getFilePath(f))
-      .filter(Boolean)
-    if (paths.length > 0) onFilesDrop(paths)
-  }, [onFilesDrop])
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault()
+      setDragging(false)
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDragging(false)
-    extractPaths(e.dataTransfer.files)
-  }, [extractPaths])
+      const files = e.dataTransfer.files
+      const entries: FileEntry[] = []
+      for (const f of Array.from(files)) {
+        const absPath = window.electronAPI.getFilePath(f)
+        if (!absPath) continue
+        const ext = absPath.slice(absPath.lastIndexOf('.')).toLowerCase()
+        if (!['.md', '.markdown'].includes(ext)) continue
+        const name = absPath.replace(/^.*[\\/]/, '')
+        entries.push({ absolutePath: absPath, relativePath: name })
+      }
+
+      if (entries.length > 0) onFilesDrop(entries)
+    },
+    [onFilesDrop],
+  )
 
   const handleBrowse = () => {
     fileInputRef.current?.click()
@@ -27,8 +42,15 @@ export default function DropZone({ onFilesDrop }: Props) {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      extractPaths(e.target.files)
-      e.target.value = '' // Reset so same file can be re-selected
+      const entries: FileEntry[] = []
+      for (const f of Array.from(e.target.files)) {
+        const absPath = window.electronAPI.getFilePath(f)
+        if (!absPath) continue
+        const name = absPath.replace(/^.*[\\/]/, '')
+        entries.push({ absolutePath: absPath, relativePath: name })
+      }
+      if (entries.length > 0) onFilesDrop(entries)
+      e.target.value = ''
     }
   }
 
@@ -44,9 +66,9 @@ export default function DropZone({ onFilesDrop }: Props) {
       }`}
     >
       <p className="text-4xl mb-4">📥</p>
-      <p className="text-text text-lg mb-2">拖放文件到此处</p>
+      <p className="text-text text-lg mb-2">拖放 Markdown 文件到此处</p>
       <p className="text-text-muted text-sm mb-4">
-        支持 PDF、Markdown、纯文本等格式
+        md 文件中引用的图片等本地文件将自动导入
       </p>
       <div className="text-text-muted text-xs mb-3">— 或者 —</div>
       <button
@@ -54,13 +76,13 @@ export default function DropZone({ onFilesDrop }: Props) {
         onClick={handleBrowse}
         className="px-4 py-2 bg-gray-700 text-text rounded-lg text-sm hover:bg-gray-600 transition-colors"
       >
-        浏览文件
+        选择 Markdown 文件
       </button>
       <input
         ref={fileInputRef}
         type="file"
         multiple
-        accept=".pdf,.md,.txt,.markdown,.html,.htm"
+        accept=".md,.markdown"
         onChange={handleFileChange}
         className="hidden"
       />

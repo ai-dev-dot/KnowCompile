@@ -14,6 +14,8 @@ import {
   getSchemaFiles,
   validateRawFile,
   readRawContent,
+  readBinaryFile,
+  parseAssetRefs,
 } from './fs-manager'
 import { chat, compileNewPages, testConnection } from './llm-service'
 import type { ChatMessage } from './llm-service'
@@ -294,9 +296,45 @@ export function registerIPCHandlers() {
     return { success: true }
   })
 
-  ipcMain.handle('wiki:delete', (_event, kbPath: string, subpath: string) => {
+  ipcMain.handle('wiki:delete', async (_event, kbPath: string, subpath: string) => {
+    const db = getIndexDB(kbPath)
+    const page = db.getPageByPath(subpath)
+
     deleteFile(resolveSafePath(kbPath, subpath))
+
+    if (page?.id) {
+      db.deletePage(subpath)
+      const vdb = await getVectorDB(kbPath)
+      await vdb.deleteChunks(page.id, 'page')
+    }
+
     return { success: true }
+  })
+
+  ipcMain.handle('assets:read', (_event, kbPath: string, relativePath: string) => {
+    const path = require('path')
+    const imagePath = path.resolve(kbPath, relativePath)
+    // Security: ensure path is within kbPath
+    if (!imagePath.startsWith(path.resolve(kbPath))) {
+      return { success: false, error: '路径越界' }
+    }
+    try {
+      const buf = readBinaryFile(imagePath)
+      const ext = path.extname(imagePath).toLowerCase()
+      const mimeTypes: Record<string, string> = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml',
+        '.bmp': 'image/bmp',
+      }
+      const mime = mimeTypes[ext] || 'application/octet-stream'
+      return { success: true, data: `data:${mime};base64,${buf.toString('base64')}` }
+    } catch (error: any) {
+      return { success: false, error: error?.message || '读取失败' }
+    }
   })
 
   ipcMain.handle('wiki:backlinks', (_event, kbPath: string, pageName: string) => {
@@ -329,8 +367,8 @@ export function registerIPCHandlers() {
     return listRawFiles(kbPath)
   })
 
-  ipcMain.handle('raw:copy', (_event, kbPath: string, sourcePath: string) => {
-    const result = copyToRaw(kbPath, sourcePath)
+  ipcMain.handle('raw:copy', (_event, kbPath: string, sourcePath: string, subDir?: string) => {
+    const result = copyToRaw(kbPath, sourcePath, subDir)
     if (result.success) {
       // Sync to sources table so hash dedup covers newly imported files
       try {
@@ -353,12 +391,60 @@ export function registerIPCHandlers() {
     return result
   })
 
+  ipcMain.handle('raw:import-with-assets', (_event, kbPath: string, mdPaths: string[]) => {
+    const results: { name: string; assetCount: number; error?: string }[] = []
+
+    for (const mdPath of mdPaths) {
+      try {
+        const mdName = pathModule.basename(mdPath)
+        const mdExt = pathModule.extname(mdName).toLowerCase()
+        if (!['.md', '.markdown'].includes(mdExt)) {
+          results.push({ name: mdName, assetCount: 0, error: '不支持的文件格式' })
+          continue
+        }
+
+        // Validate and copy the md file
+        const v = validateRawFile(kbPath, mdPath)
+        if (!v.valid) {
+          results.push({ name: mdName, assetCount: 0, error: v.error || '验证失败' })
+          continue
+        }
+        copyToRaw(kbPath, mdPath)
+
+        // Parse for local asset references
+        const assetRefs = parseAssetRefs(mdPath)
+        let assetCount = 0
+        for (const ref of assetRefs) {
+          const refName = pathModule.basename(ref.refPath)
+          const refDir = pathModule.dirname(ref.refPath)
+          const subDir = refDir === '.' ? '' : refDir
+
+          // Skip if this is the md file itself or already copied
+          if (ref.absolutePath === mdPath) continue
+
+          // Validate and copy each referenced file
+          const av = validateRawFile(kbPath, ref.absolutePath, subDir)
+          if (!av.valid) continue
+          copyToRaw(kbPath, ref.absolutePath, subDir)
+          assetCount++
+        }
+
+        results.push({ name: mdName, assetCount })
+      } catch (err: any) {
+        results.push({ name: pathModule.basename(mdPath), assetCount: 0, error: err?.message || '导入失败' })
+      }
+    }
+
+    const totalAssets = results.reduce((sum, r) => sum + r.assetCount, 0)
+    return { success: true, results, totalAssets }
+  })
+
   ipcMain.handle('raw:read', (_event, kbPath: string, subpath: string) => {
     return readFile(resolveSafePath(kbPath, subpath))
   })
 
-  ipcMain.handle('raw:validate', (_event, kbPath: string, sourcePath: string) => {
-    const result = validateRawFile(kbPath, sourcePath)
+  ipcMain.handle('raw:validate', (_event, kbPath: string, sourcePath: string, subDir?: string) => {
+    const result = validateRawFile(kbPath, sourcePath, subDir)
     if (!result.valid) return result
 
     // Content-hash dedup: compute SHA-256 and check against sources table
@@ -685,7 +771,7 @@ export function registerIPCHandlers() {
     return { success: true }
   })
 
-  ipcMain.handle('samples:delete', (_event, kbPath: string) => {
+  ipcMain.handle('samples:delete', async (_event, kbPath: string) => {
     const fs = require('fs')
     const path = require('path')
     const rawDir = path.join(kbPath, 'raw')
@@ -750,8 +836,9 @@ export function registerIPCHandlers() {
       } catch (err) { console.error('Failed to clean compile-log.json:', err) }
     }
 
-    // Clean up SQLite entries (sources and pages)
+    // Clean up SQLite entries (sources and pages) and LanceDB vectors
     const db = getIndexDB(kbPath)
+    const vdb = await getVectorDB(kbPath)
     for (const sample of SAMPLE_FILES) {
       const sourcePath = `raw/${sample.name}`
       const source = db.getSourceByPath(sourcePath)
@@ -760,7 +847,10 @@ export function registerIPCHandlers() {
         if (pages.length > 0) {
           for (const pageName of pages) {
             const page = db.getPageByPath(`wiki/${pageName}.md`)
-            if (page?.id) db.deletePage(`wiki/${pageName}.md`)
+            if (page?.id) {
+              db.deletePage(`wiki/${pageName}.md`)
+              await vdb.deleteChunks(page.id, 'page')
+            }
           }
         }
         // Delete source record

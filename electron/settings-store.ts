@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { app } from 'electron'
+import os from 'os'
 
 export interface LLMConfig {
   provider: 'openai' | 'anthropic' | 'custom'
@@ -26,7 +26,23 @@ const DEFAULT_SETTINGS: Settings = {
 }
 
 function getSettingsPath(): string {
-  return path.join(app.getPath('userData'), 'settings.json')
+  // Support env override for CLI/script usage
+  if (process.env.KNOWCOMPILE_SETTINGS_PATH) {
+    return process.env.KNOWCOMPILE_SETTINGS_PATH
+  }
+  // Check the known app data path first (works in both app and CLI modes)
+  const appDataPath = path.join(os.homedir(), 'AppData', 'Roaming', 'knowcompile', 'settings.json')
+  if (fs.existsSync(appDataPath)) {
+    return appDataPath
+  }
+  // Fallback to Electron's userData (may differ in dev vs packaged)
+  try {
+    const { app } = require('electron')
+    if (app?.getPath) {
+      return path.join(app.getPath('userData'), 'settings.json')
+    }
+  } catch { /* not in Electron context */ }
+  return appDataPath
 }
 
 export function getSettings(): Settings {

@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest'
-import { stripLeadingFrontmatter, convertWikiLinks } from './MarkdownRenderer'
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, waitFor } from '../test-utils/render'
+import {
+  stripLeadingFrontmatter,
+  convertWikiLinks,
+  default as MarkdownRenderer,
+} from './MarkdownRenderer'
 
 describe('stripLeadingFrontmatter', () => {
   it('removes standard YAML frontmatter', () => {
@@ -81,5 +86,54 @@ describe('convertWikiLinks', () => {
 
   it('handles empty input', () => {
     expect(convertWikiLinks('')).toBe('')
+  })
+})
+
+describe('MarkdownRenderer — images', () => {
+  it('renders image with absolute http URL as-is', async () => {
+    const content = '![test](https://example.com/photo.png)'
+    render(<MarkdownRenderer content={content} />)
+    await waitFor(() => {
+      const img = document.querySelector('img')
+      expect(img).toBeTruthy()
+      expect(img!.src).toBe('https://example.com/photo.png')
+    })
+  })
+
+  it('shows alt text when kbPath is not provided for relative path', async () => {
+    render(<MarkdownRenderer content="![local image](images/photo.png)" />)
+    await waitFor(() => {
+      expect(screen.getByText('local image')).toBeDefined()
+    })
+  })
+
+  it('resolves relative image path via IPC with kbPath', async () => {
+    const fakeDataURL = 'data:image/png;base64,fake'
+    const invokeSpy = vi.fn().mockResolvedValue({ success: true, data: fakeDataURL })
+    const origInvoke = (window as any).electronAPI.invoke
+    ;(window as any).electronAPI.invoke = invokeSpy
+
+    render(
+      <MarkdownRenderer content="![screenshot](images/screenshot.png)" kbPath="/fake/kb" />,
+    )
+
+    await waitFor(() => {
+      const img = document.querySelector('img')
+      expect(img).toBeTruthy()
+      expect(img!.src).toBe(fakeDataURL)
+    })
+
+    expect(invokeSpy).toHaveBeenCalledWith('assets:read', '/fake/kb', 'raw/images/screenshot.png')
+    ;(window as any).electronAPI.invoke = origInvoke
+  })
+
+  it('renders images with custom styling classes', async () => {
+    render(<MarkdownRenderer content="![test](https://example.com/img.png)" />)
+    await waitFor(() => {
+      const img = document.querySelector('img')
+      expect(img).toBeTruthy()
+      expect(img!.className).toContain('max-w-full')
+      expect(img!.className).toContain('rounded-lg')
+    })
   })
 })

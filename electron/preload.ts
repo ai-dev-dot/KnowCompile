@@ -5,8 +5,10 @@ const ALLOWED_CHANNELS = new Set([
   'kb:init', 'kb:get-path', 'kb:set-path', 'kb:select', 'preload:embedding',
   // Wiki
   'wiki:list', 'wiki:read', 'wiki:write', 'wiki:delete', 'wiki:backlinks', 'wiki:extract-links',
+  // Assets
+  'assets:read',
   // Raw
-  'raw:list', 'raw:copy', 'raw:read', 'raw:validate', 'raw:preview', 'raw:extract-pdf',
+  'raw:list', 'raw:copy', 'raw:read', 'raw:validate', 'raw:preview', 'raw:extract-pdf', 'raw:import-with-assets',
   'url:fetch',
   // Schema
   'schema:list', 'schema:write', 'schema:check-update', 'schema:update',

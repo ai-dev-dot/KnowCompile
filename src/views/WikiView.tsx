@@ -90,7 +90,7 @@ export default function WikiView({ kbPath, active }: Props) {
       <main className="flex-1 overflow-y-auto">
         {activePage ? (
           <div className="max-w-3xl mx-auto px-8 py-8">
-            <MarkdownRenderer content={content} onLinkClick={navigateTo} />
+            <MarkdownRenderer content={content} kbPath={kbPath} onLinkClick={navigateTo} />
 
             {/* Related pages — wiki-style footer */}
             <div className="mt-12 pt-6 border-t border-border space-y-4">

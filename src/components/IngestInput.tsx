@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import DropZone from './DropZone'
+import DropZone, { type FileEntry } from './DropZone'
 
 interface Props {
-  onFilesDrop: (paths: string[]) => void
+  onFilesDrop: (entries: FileEntry[]) => void
   onTextPaste: (text: string) => void
   onURLSubmit: (url: string) => void
 }
@@ -50,7 +50,7 @@ export default function IngestInput({ onFilesDrop, onTextPaste, onURLSubmit }: P
       {mode === 'drop' && (
         <>
           <DropZone onFilesDrop={onFilesDrop} />
-          <p className="text-xs text-text-muted mt-3 text-center">支持 PDF、Markdown、TXT、HTML，单文件最大 50MB</p>
+          <p className="text-xs text-text-muted mt-3 text-center">md 文件中的本地图片、附件引用将自动解析并一同导入</p>
         </>
       )}
 

@@ -6,7 +6,7 @@ import IngestInput from './IngestInput'
 describe('IngestInput', () => {
   it('renders drop zone by default', () => {
     render(<IngestInput onFilesDrop={() => {}} onTextPaste={() => {}} onURLSubmit={() => {}} />)
-    expect(screen.getByText('拖放文件到此处')).toBeDefined()
+    expect(screen.getByText('拖放 Markdown 文件到此处')).toBeDefined()
   })
 
   it('switches to text paste mode and submits', () => {
@@ -46,5 +46,32 @@ describe('IngestInput', () => {
     expect(screen.getByRole('button', { name: /拖放文件/ })).toBeDefined()
     expect(screen.getByRole('button', { name: /粘贴文本/ })).toBeDefined()
     expect(screen.getByRole('button', { name: /网页链接/ })).toBeDefined()
+  })
+
+  it('renders browse button', () => {
+    render(<IngestInput onFilesDrop={() => {}} onTextPaste={() => {}} onURLSubmit={() => {}} />)
+    expect(screen.getByText('选择 Markdown 文件')).toBeDefined()
+  })
+
+  it('passes FileEntry[] to onFilesDrop when files are selected', () => {
+    const onFilesDrop = vi.fn()
+    render(<IngestInput onFilesDrop={onFilesDrop} onTextPaste={() => {}} onURLSubmit={() => {}} />)
+
+    // Simulate file selection via the hidden file input
+    const fileInput = document.querySelector('input[type="file"]')
+    expect(fileInput).toBeTruthy()
+
+    // Create a mock file
+    const mockFile = new File(['test content'], 'test.md', { type: 'text/markdown' })
+    Object.defineProperty(mockFile, 'path', { value: '/fake/path/test.md' })
+
+    fireEvent.change(fileInput!, { target: { files: [mockFile] } })
+
+    // onFilesDrop should have been called with FileEntry[]
+    expect(onFilesDrop).toHaveBeenCalled()
+    const entries = onFilesDrop.mock.calls[0][0]
+    expect(Array.isArray(entries)).toBe(true)
+    expect(entries[0]).toHaveProperty('absolutePath')
+    expect(entries[0].relativePath).toBe('test.md')
   })
 })

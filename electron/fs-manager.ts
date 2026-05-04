@@ -55,7 +55,7 @@ export function deleteFile(filePath: string): void {
   }
 }
 
-const SUPPORTED_EXTS = new Set(['.pdf', '.md', '.txt', '.markdown', '.html', '.htm'])
+const SUPPORTED_EXTS = new Set(['.pdf', '.md', '.txt', '.markdown', '.html', '.htm', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'])
 const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
 
 export interface ValidateResult {
@@ -65,12 +65,12 @@ export interface ValidateResult {
   code?: string
 }
 
-export function validateRawFile(kbPath: string, sourcePath: string): ValidateResult {
+export function validateRawFile(kbPath: string, sourcePath: string, subDir?: string): ValidateResult {
   const name = path.basename(sourcePath)
   const ext = path.extname(name).toLowerCase()
 
   if (!SUPPORTED_EXTS.has(ext)) {
-    return { valid: false, code: 'unsupported_format', error: `不支持 .${ext} 格式，支持：PDF、Markdown、TXT、HTML` }
+    return { valid: false, code: 'unsupported_format', error: `不支持 ${ext} 格式，支持：PDF、Markdown、TXT、HTML、图片` }
   }
 
   try {
@@ -82,14 +82,73 @@ export function validateRawFile(kbPath: string, sourcePath: string): ValidateRes
     return { valid: false, code: 'unsupported_format', error: '无法读取文件信息' }
   }
 
-  // Check for duplicates
+  // Check for duplicates (in the target subdirectory within raw/)
   const rawDir = path.join(kbPath, 'raw')
-  const destPath = path.join(rawDir, name)
+  const destPath = path.join(rawDir, subDir || '', name)
   if (fs.existsSync(destPath)) {
-    return { valid: false, code: 'duplicate', error: `文件 "${name}" 已存在` }
+    return { valid: false, code: 'duplicate', error: `文件 "${subDir ? subDir + '/' + name : name}" 已存在` }
   }
 
   return { valid: true }
+}
+
+export function readBinaryFile(filePath: string): Buffer {
+  return fs.readFileSync(filePath)
+}
+
+/** Parse a markdown file for all local asset references (images, links, HTML src). */
+export interface AssetRef {
+  /** The matched text in markdown, e.g. "![alt](images/photo.png)" */
+  raw: string
+  /** The referenced path as written in the markdown, e.g. "images/photo.png" */
+  refPath: string
+  /** Absolute path of the referenced file on disk */
+  absolutePath: string
+}
+
+export function parseAssetRefs(mdFilePath: string): AssetRef[] {
+  const mdDir = path.dirname(mdFilePath)
+  const content = readBinaryFile(mdFilePath).toString('utf-8')
+  const refs: AssetRef[] = []
+  const seen = new Set<string>()
+
+  // Match patterns that reference local files:
+  // 1. Markdown image: ![alt](path) or ![alt](path "title")
+  // 2. Markdown link: [text](path)
+  // 3. HTML img src: <img ... src="path" ...>
+  // 4. HTML <a href="path">
+  const patterns: RegExp[] = [
+    /!\[([^\]]*)\]\(([^)\s"']+)(?:\s+"[^"]*")?\)/g,   // md image
+    /(?<!!)\[([^\]]*)\]\(([^)\s"']+)(?:\s+"[^"]*")?\)/g, // md link (not preceded by !)
+    /<img[^>]+src=["']([^"']+)["'][^>]*>/gi,             // html img
+    /<a[^>]+href=["']([^"']+)["'][^>]*>/gi,             // html link
+  ]
+
+  for (const pattern of patterns) {
+    pattern.lastIndex = 0
+    let match
+    while ((match = pattern.exec(content)) !== null) {
+      const refPath = match[match.length - 1] // last capture group is always the path
+      // Skip URLs, anchors, data URIs
+      if (/^(https?:|mailto:|#|data:|\/\/)/i.test(refPath)) continue
+      // Skip wiki links [[...]]
+      if (refPath.startsWith('[[')) continue
+
+      // Resolve relative to md file directory
+      const decoded = decodeURIComponent(refPath)
+      const absolute = path.resolve(mdDir, decoded)
+
+      // Deduplicate
+      if (seen.has(absolute)) continue
+      seen.add(absolute)
+
+      if (fs.existsSync(absolute) && fs.statSync(absolute).isFile()) {
+        refs.push({ raw: match[0], refPath, absolutePath: absolute })
+      }
+    }
+  }
+
+  return refs
 }
 
 export function readRawContent(kbPath: string, fileName: string): string {
@@ -97,16 +156,17 @@ export function readRawContent(kbPath: string, fileName: string): string {
   return fs.readFileSync(filePath, 'utf-8')
 }
 
-export function copyToRaw(kbPath: string, sourcePath: string): { success: boolean; name?: string; error?: string } {
+export function copyToRaw(kbPath: string, sourcePath: string, subDir?: string): { success: boolean; name?: string; error?: string } {
   const name = path.basename(sourcePath)
   try {
     const rawDir = path.join(kbPath, 'raw')
-    if (!fs.existsSync(rawDir)) {
-      fs.mkdirSync(rawDir, { recursive: true })
+    const targetDir = subDir ? path.join(rawDir, subDir) : rawDir
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true })
     }
-    const destPath = path.join(rawDir, name)
+    const destPath = path.join(targetDir, name)
     fs.copyFileSync(sourcePath, destPath)
-    return { success: true, name }
+    return { success: true, name: subDir ? `${subDir}/${name}` : name }
   } catch (error: any) {
     const msg = error?.code === 'ENOENT'
       ? `源文件不存在: ${sourcePath}`

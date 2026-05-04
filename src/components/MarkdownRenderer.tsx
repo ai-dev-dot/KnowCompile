@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 
 interface Props {
   content: string
+  kbPath?: string
   onLinkClick?: (pageName: string) => void
 }
 
@@ -37,7 +38,48 @@ export function convertWikiLinks(md: string): string {
   }).join('')
 }
 
-export default function MarkdownRenderer({ content, onLinkClick }: Props) {
+function ResolvedImage({ src, alt, kbPath }: { src?: string; alt?: string; kbPath?: string }) {
+  const [resolved, setResolved] = useState<string | undefined>(undefined)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    if (!src) return
+    // Keep absolute URLs and data URIs as-is
+    if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+      setResolved(src)
+      return
+    }
+    // Relative path — try raw/ then wiki/
+    if (kbPath) {
+      let cancelled = false
+      ;(async () => {
+        for (const dir of ['raw', 'wiki']) {
+          const result = await window.electronAPI.invoke('assets:read', kbPath, `${dir}/${src}`)
+          if (result?.success && result.data) {
+            if (!cancelled) setResolved(result.data)
+            return
+          }
+        }
+        if (!cancelled) setError(true)
+      })()
+      return () => { cancelled = true }
+    }
+    setError(true)
+  }, [src, kbPath])
+
+  if (!src) return null
+  if (error) return <span className="text-text-muted italic text-sm">{alt || src}</span>
+  return (
+    <img
+      src={resolved ?? undefined}
+      alt={alt || ''}
+      className="max-w-full h-auto rounded-lg my-2 border border-border"
+      loading="lazy"
+    />
+  )
+}
+
+export default function MarkdownRenderer({ content, kbPath, onLinkClick }: Props) {
   const processed = useMemo(() => {
     let md = content
     md = stripLeadingFrontmatter(md)
@@ -69,6 +111,9 @@ export default function MarkdownRenderer({ content, onLinkClick }: Props) {
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
         components={{
+          img: ({ src, alt }: any) => (
+            <ResolvedImage src={src} alt={alt} kbPath={kbPath} />
+          ),
           a: ({ href, children, ...props }) => {
             if (href?.startsWith('#wiki:')) {
               const pageName = decodeURIComponent(href.slice(6))

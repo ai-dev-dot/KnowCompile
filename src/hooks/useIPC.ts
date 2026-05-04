@@ -1,6 +1,5 @@
-const api = window.electronAPI
-
 export function useIPC() {
+  const api = window.electronAPI
   return {
     // KB
     initKB: (path: string) =>
@@ -26,15 +25,25 @@ export function useIPC() {
     extractLinks: (content: string) =>
       api.invoke('wiki:extract-links', content) as Promise<string[]>,
 
+    // Assets
+    readAsset: (kbPath: string, relativePath: string) =>
+      api.invoke('assets:read', kbPath, relativePath) as Promise<{ success: boolean; data?: string; error?: string }>,
+
     // Raw
     listRawFiles: (kbPath: string) =>
       api.invoke('raw:list', kbPath) as Promise<{ name: string; path: string; size: number; addedAt: string }[]>,
-    copyToRaw: (kbPath: string, sourcePath: string) =>
-      api.invoke('raw:copy', kbPath, sourcePath) as Promise<{ success: boolean; name?: string; error?: string }>,
+    copyToRaw: (kbPath: string, sourcePath: string, subDir?: string) =>
+      api.invoke('raw:copy', kbPath, sourcePath, subDir) as Promise<{ success: boolean; name?: string; error?: string }>,
     readRawFile: (kbPath: string, subpath: string) =>
       api.invoke('raw:read', kbPath, subpath) as Promise<string>,
-    validateRawFile: (kbPath: string, sourcePath: string) =>
-      api.invoke('raw:validate', kbPath, sourcePath) as Promise<{ valid: boolean; error?: string; code?: 'too_large' | 'unsupported_format' | 'duplicate' | 'duplicate_content' }>,
+    validateRawFile: (kbPath: string, sourcePath: string, subDir?: string) =>
+      api.invoke('raw:validate', kbPath, sourcePath, subDir) as Promise<{ valid: boolean; error?: string; code?: 'too_large' | 'unsupported_format' | 'duplicate' | 'duplicate_content' }>,
+    importWithAssets: (kbPath: string, mdPaths: string[]) =>
+      api.invoke('raw:import-with-assets', kbPath, mdPaths) as Promise<{
+        success: boolean
+        results: { name: string; assetCount: number; error?: string }[]
+        totalAssets: number
+      }>,
     previewRawContent: (kbPath: string, fileName: string) =>
       api.invoke('raw:preview', kbPath, fileName) as Promise<string>,
     extractPDFText: (filePath: string) =>

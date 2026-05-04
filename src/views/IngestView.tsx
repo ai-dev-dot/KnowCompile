@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import IngestInput from '../components/IngestInput'
 import RawFileList, { type RawFile } from '../components/RawFileList'
 import { useIPC } from '../hooks/useIPC'
+import type { FileEntry } from '../components/DropZone'
 
 interface Props { kbPath: string; active?: boolean }
 
@@ -32,29 +33,20 @@ export default function IngestView({ kbPath, active }: Props) {
   }, [kbPath, active])
 
   // --- File drop ---
-  const handleFilesDrop = async (paths: string[]) => {
-    setStatus(`正在导入 ${paths.length} 个文件...`)
-    let ok = 0, fail = 0
+  const handleFilesDrop = async (entries: FileEntry[]) => {
+    const mdPaths = entries.map(e => e.absolutePath)
+    setStatus(`正在导入 ${mdPaths.length} 个文件，自动解析引用...`)
 
-    for (const p of paths) {
-      // Validate before import
-      const validation = await ipc.validateRawFile(kbPath, p)
-      if (!validation.valid) {
-        fail++
-        setStatus(validation.error || '导入验证失败')
-        continue
-      }
-      const result = await ipc.copyToRaw(kbPath, p)
-      if (result.success) ok++
-      else {
-        fail++
-        setStatus(`导入 "${result.name}" 失败：${result.error}`)
-      }
-    }
-
+    const result = await ipc.importWithAssets(kbPath, mdPaths)
     await loadAll()
+
+    const ok = result.results.filter(r => !r.error).length
+    const fail = result.results.filter(r => r.error).length
     const msgs: string[] = []
-    if (ok > 0) msgs.push(`成功导入 ${ok} 个文件`)
+    if (ok > 0) {
+      const assetNote = result.totalAssets > 0 ? `（含 ${result.totalAssets} 个引用文件）` : ''
+      msgs.push(`成功导入 ${ok} 个文件${assetNote}`)
+    }
     if (fail > 0) msgs.push(`${fail} 个导入失败`)
     setStatus(msgs.length > 0 ? msgs.join('，') : null)
     if (msgs.length > 0) setTimeout(() => setStatus(null), 5000)
