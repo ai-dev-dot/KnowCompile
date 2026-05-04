@@ -34,7 +34,7 @@ Electron 桌面应用 — AI 资料编译为结构化 Wiki。
 - `npx vitest run src/` — 仅渲染层测试（jsdom + @testing-library/react）
 
 **测试架构:**
-- `tests/` — 后端测试，node 环境（229 个通过）
+- `tests/` — 后端测试，node 环境（260 个通过）
 - `src/*.test.{ts,tsx}` — 渲染层测试，jsdom 环境（45 个通过）
 - `src/test-utils/mock-ipc.ts` — IPC mock 工厂，覆盖 40+ 通道
 - `src/test-utils/render.tsx` — 组件测试入口，自动 stub window.electronAPI
