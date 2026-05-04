@@ -12,6 +12,8 @@ import {
   extractBacklinks,
   extractLinks,
   getSchemaFiles,
+  validateRawFile,
+  readRawContent,
 } from './fs-manager'
 import { chat, compileNewPages, testConnection } from './llm-service'
 import type { ChatMessage } from './llm-service'
@@ -23,7 +25,8 @@ import { validateCompileOutput, validateMultiPage } from './compile-validator'
 import { IndexDB } from './index-db'
 import { VectorDB } from './vector-db'
 import { IndexRebuilder } from './index-rebuilder'
-import { incrementalCompile } from './compile-service'
+import { incrementalCompile, extractPDFText } from './compile-service'
+import { fetchAndExtract } from './url-fetcher'
 import { semanticQA, semanticQAStream } from './qa-service'
 import {
   createConversation, addMessage, getConversation, listConversations,
@@ -330,6 +333,22 @@ export function registerIPCHandlers() {
 
   ipcMain.handle('raw:read', (_event, kbPath: string, subpath: string) => {
     return readFile(resolveSafePath(kbPath, subpath))
+  })
+
+  ipcMain.handle('raw:validate', (_event, kbPath: string, sourcePath: string) => {
+    return validateRawFile(kbPath, sourcePath)
+  })
+
+  ipcMain.handle('raw:preview', (_event, kbPath: string, fileName: string) => {
+    return readRawContent(kbPath, fileName)
+  })
+
+  ipcMain.handle('raw:extract-pdf', async (_event, filePath: string) => {
+    return extractPDFText(filePath)
+  })
+
+  ipcMain.handle('url:fetch', async (_event, url: string, overrideSettings?: any) => {
+    return fetchAndExtract(url, overrideSettings)
   })
 
   // Schema

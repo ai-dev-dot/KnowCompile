@@ -55,18 +55,65 @@ export function deleteFile(filePath: string): void {
   }
 }
 
+const SUPPORTED_EXTS = new Set(['.pdf', '.md', '.txt', '.markdown', '.html', '.htm'])
+const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
+
+export interface ValidateResult {
+  valid: boolean
+  error?: string
+  /** 'too_large' | 'unsupported_format' | 'duplicate' */
+  code?: string
+}
+
+export function validateRawFile(kbPath: string, sourcePath: string): ValidateResult {
+  const name = path.basename(sourcePath)
+  const ext = path.extname(name).toLowerCase()
+
+  if (!SUPPORTED_EXTS.has(ext)) {
+    return { valid: false, code: 'unsupported_format', error: `不支持 .${ext} 格式，支持：PDF、Markdown、TXT、HTML` }
+  }
+
+  try {
+    const stat = fs.statSync(sourcePath)
+    if (stat.size > MAX_FILE_SIZE) {
+      return { valid: false, code: 'too_large', error: `文件过大（${(stat.size / 1024 / 1024).toFixed(1)}MB），最大支持 50MB` }
+    }
+  } catch {
+    return { valid: false, code: 'unsupported_format', error: '无法读取文件信息' }
+  }
+
+  // Check for duplicates
+  const rawDir = path.join(kbPath, 'raw')
+  const destPath = path.join(rawDir, name)
+  if (fs.existsSync(destPath)) {
+    return { valid: false, code: 'duplicate', error: `文件 "${name}" 已存在` }
+  }
+
+  return { valid: true }
+}
+
+export function readRawContent(kbPath: string, fileName: string): string {
+  const filePath = path.join(kbPath, 'raw', fileName)
+  return fs.readFileSync(filePath, 'utf-8')
+}
+
 export function copyToRaw(kbPath: string, sourcePath: string): { success: boolean; name?: string; error?: string } {
+  const name = path.basename(sourcePath)
   try {
     const rawDir = path.join(kbPath, 'raw')
     if (!fs.existsSync(rawDir)) {
       fs.mkdirSync(rawDir, { recursive: true })
     }
-    const name = path.basename(sourcePath)
     const destPath = path.join(rawDir, name)
     fs.copyFileSync(sourcePath, destPath)
     return { success: true, name }
-  } catch (error) {
-    return { success: false, error: String(error) }
+  } catch (error: any) {
+    const msg = error?.code === 'ENOENT'
+      ? `源文件不存在: ${sourcePath}`
+      : error?.code === 'ENOSPC'
+        ? '磁盘空间不足'
+        : String(error?.message || error)
+    return { success: false, name, error: msg }
   }
 }
 

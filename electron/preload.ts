@@ -6,7 +6,8 @@ const ALLOWED_CHANNELS = new Set([
   // Wiki
   'wiki:list', 'wiki:read', 'wiki:write', 'wiki:delete', 'wiki:backlinks', 'wiki:extract-links',
   // Raw
-  'raw:list', 'raw:copy', 'raw:read',
+  'raw:list', 'raw:copy', 'raw:read', 'raw:validate', 'raw:preview', 'raw:extract-pdf',
+  'url:fetch',
   // Schema
   'schema:list', 'schema:write', 'schema:check-update', 'schema:update',
   // Settings

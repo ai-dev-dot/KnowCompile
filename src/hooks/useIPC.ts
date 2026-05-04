@@ -33,6 +33,14 @@ export function useIPC() {
       api.invoke('raw:copy', kbPath, sourcePath) as Promise<{ success: boolean; name?: string; error?: string }>,
     readRawFile: (kbPath: string, subpath: string) =>
       api.invoke('raw:read', kbPath, subpath) as Promise<string>,
+    validateRawFile: (kbPath: string, sourcePath: string) =>
+      api.invoke('raw:validate', kbPath, sourcePath) as Promise<{ valid: boolean; error?: string; code?: string }>,
+    previewRawContent: (kbPath: string, fileName: string) =>
+      api.invoke('raw:preview', kbPath, fileName) as Promise<string>,
+    extractPDFText: (filePath: string) =>
+      api.invoke('raw:extract-pdf', filePath) as Promise<{ text: string; pages: number } | { error: string }>,
+    fetchURL: (url: string) =>
+      api.invoke('url:fetch', url) as Promise<{ success: boolean; content?: string; title?: string; error?: string }>,
 
     // Schema
     listSchema: (kbPath: string) =>
@@ -136,6 +144,8 @@ export function useIPC() {
       api.invoke('gaps:list', kbPath) as Promise<any[]>,
     deleteGap: (kbPath: string, gapId: string) =>
       api.invoke('gaps:delete', kbPath, gapId) as Promise<{ success: boolean }>,
+    getGapStats: (kbPath: string) =>
+      api.invoke('gaps:stats', kbPath) as Promise<any>,
 
     // Advanced settings
     getAdvancedSettings: (kbPath: string) =>

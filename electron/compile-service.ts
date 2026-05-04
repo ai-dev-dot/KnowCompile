@@ -27,6 +27,7 @@ import type { LLMConfig } from './settings-store'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
+import { PDFParse } from 'pdf-parse'
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -50,6 +51,29 @@ export interface CompileResult {
 // ---------------------------------------------------------------------------
 
 /**
+ * Extract text from a PDF file.
+ * Returns { text, pages } on success, or { error } with a user-friendly message.
+ */
+export async function extractPDFText(filePath: string): Promise<{ text: string; pages: number } | { error: string }> {
+  try {
+    const pdfBuffer = fs.readFileSync(filePath)
+    const parser = new PDFParse({ data: pdfBuffer })
+    const pdfData = await parser.getText()
+    const text = pdfData.text?.trim() || ''
+    if (!text) {
+      return { error: '此 PDF 可能为扫描件或图片，无法提取文本内容' }
+    }
+    return { text, pages: pdfData.total }
+  } catch (err: any) {
+    const msg = err?.message || String(err)
+    if (msg.includes('Invalid') || msg.includes('PDF') || msg.includes('parse')) {
+      return { error: 'PDF 文件已损坏或格式不受支持' }
+    }
+    return { error: `PDF 解析失败：${msg}` }
+  }
+}
+
+/**
  * Read a raw file, handling PDF extraction via pdf-parse.
  * Returns the text content and file size in bytes.
  */
@@ -57,9 +81,10 @@ async function readRawFile(filePath: string): Promise<{ content: string; size: n
   const ext = path.extname(filePath).toLowerCase()
 
   if (ext === '.pdf') {
-    const pdfBuffer = fs.readFileSync(filePath)
-    const pdfData = await require('pdf-parse')(pdfBuffer)
-    return { content: pdfData.text, size: pdfBuffer.length }
+    const result = await extractPDFText(filePath)
+    if ('error' in result) throw new Error(result.error)
+    const size = fs.statSync(filePath).size
+    return { content: result.text, size }
   }
 
   const content = fs.readFileSync(filePath, 'utf-8')
