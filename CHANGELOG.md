@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.2.3 (2026-05-04)
+
+资料摄入全面改造——不只是拖文件。
+
+### 新增
+
+- **PDF 文本提取** — 真正的 PDF 支持，自动提取文本内容。损坏或扫描件 PDF 给出明确中文提示。
+- **文本粘贴摄入** — 直接粘贴 Markdown/纯文本，系统自动保存为 `.md` 文件。
+- **网页链接摄入** — 粘贴 URL，LLM 自动抓取网页正文并转为 Markdown。
+- **批量编译** — "全部编译"按钮，一次编译所有未处理的文件，完成后汇总结果。
+- **文件内容预览** — 点击文件名展开 raw 文件内容预览，不用离开应用。
+- **导入文件校验** — 自动拒绝超大文件（>50MB）、不支持的格式、重复文件。
+- **用户友好错误** — 编译失败显示中文提示，不再是 JavaScript 异常。
+
+### 工程
+
+- `electron/url-fetcher.ts`：URL 抓取 + LLM 正文提取
+- `electron/fs-manager.ts`：新增 `validateRawFile()`、`readRawContent()`，copyToRaw 错误处理
+- `electron/compile-service.ts`：新增 `extractPDFText()`（pdf-parse v2）
+- `src/components/IngestInput.tsx`：三种摄入模式（拖放/粘贴/URL）
+- `src/components/RawFileList.tsx`：批量编译、预览、中文错误映射
+- `src/views/IngestView.tsx`：重构为编排层
+- 14 个新测试（fs-manager 9 + IngestInput 5）
+
+---
+
 ## v0.2.2 (2026-05-04)
 
 渲染层测试基础设施建设——React 组件测试从 0 到 45 个用例。

@@ -43,6 +43,8 @@ electron/           # 主进程（Electron main process）
   search-indexer.ts  # FlexSearch 全文索引
   compile-validator.ts # 编译输出质量检查
   wiki-normalizer.ts # Wiki 页面规范化
+  fs-manager.ts     # 文件系统操作（导入/校验/预览）
+  url-fetcher.ts    # URL 抓取 + LLM 正文提取
   utils.ts          # 共享工具（stripThinking, extractThinking）
   gap-store.ts      # 知识缺口持久化
   report-generator.ts # QA 日报生成器
@@ -62,6 +64,9 @@ src/                # 渲染进程（React）
     MarkdownRenderer.tsx # Markdown 渲染（react-markdown）
     IconSidebar.tsx    # 导航侧边栏
     PageList.tsx       # 页面列表
+    IngestInput.tsx    # 三种摄入模式（拖放/粘贴/URL）
+    RawFileList.tsx    # 文件列表 + 批量编译 + 预览
+    DropZone.tsx       # 文件拖放区
   hooks/
     useIPC.ts       # IPC 类型化封装
   test-utils/        # 渲染层测试工具
