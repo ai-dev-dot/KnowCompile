@@ -96,7 +96,13 @@
       "Bash(ls node_modules/.bin/electron*)",
       "Bash(which npx *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" --connect-timeout 10 \"https://api.minimax.chat/v1/models\" -H \"Authorization: Bearer test\")",
-      "Bash(curl -s --connect-timeout 10 \"https://api.minimax.chat/v1/models\" -H \"Authorization: Bearer test\")"
+      "Bash(curl -s --connect-timeout 10 \"https://api.minimax.chat/v1/models\" -H \"Authorization: Bearer test\")",
+      "Bash(pkill -f \"vite\")",
+      "Bash(pkill -f \"electron\")",
+      "Bash(findstr \":5199\")",
+      "Bash(tasklist //FI \"PID eq 16532\")",
+      "Bash(tasklist //FI \"PID eq 25180\")",
+      "Bash(tasklist //FI \"IMAGENAME eq electron.exe\")"
     ]
   }
 }
