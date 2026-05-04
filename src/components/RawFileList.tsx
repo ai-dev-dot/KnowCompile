@@ -109,7 +109,7 @@ export default function RawFileList({ kbPath, files, statuses, onStatusChange }:
         for (const p of wikiPages) await ipc.trackSamplePage(kbPath, p)
       }
 
-      setCompileResult({ type: 'ok', msg: `已生成 ${wikiPages.join('、')}` })
+      setCompileResult({ type: 'ok', msg: `已生成：${wikiPages.join('、')}  → 切换到左侧 Wiki 视图查看` })
       onStatusChange()
     } catch (err) {
       let msg = mapError(err)
@@ -147,7 +147,7 @@ export default function RawFileList({ kbPath, files, statuses, onStatusChange }:
     setBatchCompiling(false)
     onStatusChange()
     if (fail === 0 && ok > 0) {
-      setCompileResult({ type: 'ok', msg: `全部编译成功 — ${ok} 个文件` })
+      setCompileResult({ type: 'ok', msg: `全部编译成功 — ${ok} 个文件  → 切换到左侧 Wiki 视图查看` })
     } else if (fail === 0 && ok === 0) {
       setCompileResult({ type: 'ok', msg: '所有文件已编译' })
     } else {

@@ -87,27 +87,6 @@ export default function IngestView({ kbPath, active }: Props) {
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      {/* File list sidebar */}
-      <aside className="w-[220px] bg-panel flex flex-col flex-shrink-0 border-r border-border">
-        <div className="px-4 py-3 text-sm font-semibold text-text border-b border-border">
-          raw/ 资料
-        </div>
-        <div className="flex-1 overflow-y-auto p-2">
-          {files.length === 0 ? (
-            <p className="text-text-muted text-xs p-3">暂无资料</p>
-          ) : (
-            files.map((file) => (
-              <div key={file.path} className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-gray-800 group">
-                <span className="text-sm text-text-muted truncate">{file.name}</span>
-                <span className="text-xs text-text-muted opacity-0 group-hover:opacity-100">
-                  {statuses[file.name]?.compiled ? '已编译' : ''}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      </aside>
-
       {/* Main area */}
       <main className="flex-1 p-8 overflow-y-auto">
         <h2 className="text-xl font-semibold text-text mb-6">资料摄入</h2>
@@ -127,7 +106,7 @@ export default function IngestView({ kbPath, active }: Props) {
         )}
 
         <div className="mt-8">
-          <h3 className="text-sm font-semibold text-text-muted mb-3">已导入的资料</h3>
+          <h3 className="text-sm font-semibold text-text-muted mb-3">已导入的资料 ({files.length})</h3>
           <RawFileList
             kbPath={kbPath}
             files={files}

@@ -33,7 +33,7 @@ export default function IngestInput({ onFilesDrop, onTextPaste, onURLSubmit }: P
     <div>
       {/* Mode tabs */}
       <div className="flex gap-2 mb-4">
-        {([['drop', '拖放文件'], ['text', '粘贴文本'], ['url', '网页链接']] as const).map(([key, label]) => (
+        {([['drop', '📥 拖放文件'], ['text', '📋 粘贴文本'], ['url', '🌐 网页链接']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setMode(key)}
@@ -47,7 +47,12 @@ export default function IngestInput({ onFilesDrop, onTextPaste, onURLSubmit }: P
       </div>
 
       {/* Drop zone */}
-      {mode === 'drop' && <DropZone onFilesDrop={onFilesDrop} />}
+      {mode === 'drop' && (
+        <>
+          <DropZone onFilesDrop={onFilesDrop} />
+          <p className="text-xs text-text-muted mt-3 text-center">支持 PDF、Markdown、TXT、HTML，单文件最大 50MB</p>
+        </>
+      )}
 
       {/* Text paste */}
       {mode === 'text' && (
@@ -65,6 +70,7 @@ export default function IngestInput({ onFilesDrop, onTextPaste, onURLSubmit }: P
           >
             导入文本
           </button>
+          <p className="text-xs text-text-muted">支持 Markdown 格式，将自动存为 .md 文件</p>
         </div>
       )}
 
@@ -85,6 +91,7 @@ export default function IngestInput({ onFilesDrop, onTextPaste, onURLSubmit }: P
           >
             {urlLoading ? '抓取中...' : '抓取网页'}
           </button>
+          <p className="text-xs text-text-muted">LLM 将自动提取网页正文并转为 Markdown</p>
         </form>
       )}
     </div>
