@@ -21,8 +21,14 @@
 ### 配置与 UI
 
 - **审查模型独立配置** — 设置中可指定 `review_llm`（模型+Key+Base URL），编译时用独立模型审查内容质量。新增 `enable_content_review` 开关。
-- **批量编译 UI** — RawFileList 新增"全部编译"按钮 + 进度条 + 逐文件结果汇总。
+- **批量编译 UI** — RawFileList 新增"全部编译"按钮 + 进度条 + 逐文件结果汇总。文件行实时显示当前编译步骤（如"LLM 生成 Wiki 页面"）。
+- **一键重置 Wiki** — 高级设置中新增"重置所有 Wiki 页面"按钮，删除所有页面、清空索引和编译日志、重置 raw 文件为待编译状态。
 - **wiki:delete** 现在同步清理 SQLite 和 LanceDB 向量。
+
+### 修复
+
+- 批量编译缺少 progress 监听器导致进度条不更新 — 已修复。
+- `updateSourceStatus` 在非 compiled 状态下也写入 `last_compiled_at`，导致重置后文件仍被判为已编译 — 改为仅在 status='compiled' 时写入。
 
 ### 工程
 
