@@ -133,10 +133,17 @@ export default function RawFileList({ kbPath, files, statuses, onStatusChange }:
     setBatchTotal(unprocessed.length)
     let ok = 0, fail = 0
 
+    // Register progress listener for batch compile
+    cleanupRef.current?.()
+    cleanupRef.current = ipc.on('compile:progress', (progress: CompileProgress) => {
+      setCompileProgress(progress)
+    })
+
     for (let i = 0; i < unprocessed.length; i++) {
       const f = unprocessed[i]
       setBatchIndex(i + 1)
       setCompiling(f.path)
+      setCompileProgress(null)
 
       try {
         const result = await ipc.compileV2(kbPath, f.path)
@@ -152,11 +159,15 @@ export default function RawFileList({ kbPath, files, statuses, onStatusChange }:
         setBatchResults(prev => ({ ...prev, [f.name]: { ok: false, error: msg } }))
       }
 
+      setCompileProgress(null)
       // Refresh statuses immediately after each file
       onStatusChange()
     }
 
+    cleanupRef.current?.()
+    cleanupRef.current = null
     setCompiling(null)
+    setCompileProgress(null)
     setBatchCompiling(false)
     setCompileResult({
       type: fail === 0 ? 'ok' : 'err',
@@ -206,7 +217,8 @@ export default function RawFileList({ kbPath, files, statuses, onStatusChange }:
 
     // Currently compiling this file
     if (isCompiling) {
-      return { label: '编译中', color: 'text-accent', dot: 'bg-accent animate-pulse' }
+      const stepLabel = compileProgress?.label || '编译中'
+      return { label: stepLabel, color: 'text-accent', dot: 'bg-accent animate-pulse' }
     }
 
     // Just completed in this batch
