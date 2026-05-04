@@ -9,7 +9,7 @@ interface Props {
 }
 
 /** Strip leading YAML frontmatter (standard --- ... --- at file start) */
-function stripLeadingFrontmatter(md: string): string {
+export function stripLeadingFrontmatter(md: string): string {
   const trimmed = md.trimStart()
   if (!trimmed.startsWith('---')) return md
   const afterOpen = trimmed.slice(3)
@@ -22,7 +22,7 @@ function stripLeadingFrontmatter(md: string): string {
 }
 
 /** Convert [[page name]] to [page name](#wiki:encoded) for react-markdown linking */
-function convertWikiLinks(md: string): string {
+export function convertWikiLinks(md: string): string {
   // Only convert [[...]] outside code blocks
   // Strategy: split by fenced code blocks, only convert outside blocks
   const codeBlockRegex = /(```[\s\S]*?```)/g
