@@ -640,9 +640,11 @@ export async function* semanticQAStream(
     allMessages.push({ role: 'user', content: `问题：${question}` })
 
     const stream = chatStream(allMessages, overrideSettings, { kbPath, role: 'qa', qaSessionId }, signal)
+    let accumulated = ''
     for await (const st of stream) {
       if (signal?.aborted) break
       if (st.token) {
+        accumulated = st.accumulated
         yield { type: 'token', token: st.token, accumulated: st.accumulated, thinking: st.thinking }
       }
     }

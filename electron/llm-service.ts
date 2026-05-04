@@ -12,8 +12,9 @@ import { stripThinking, extractThinking } from './utils'
 // ---------------------------------------------------------------------------
 
 /** Rough token estimate: Chinese chars / 2 ≈ tokens. 估算值，仅供参考。 */
-export function estimateLLMTokens(text: string): number {
-  return Math.ceil(text.length / 2)
+export function estimateLLMTokens(text: string | number): number {
+  const len = typeof text === 'string' ? text.length : text
+  return Math.ceil(len / 2)
 }
 
 /** Price per 1M tokens (input / output). Updated May 2026. */
@@ -146,7 +147,7 @@ async function runLLM(params: RunLLMParams): Promise<string> {
 export async function chat(
   messages: ChatMessage[],
   overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
-  logInfo?: { kbPath: string; role: LLMLogEntry['role'] },
+  logInfo?: { kbPath: string; role: LLMLogEntry['role']; qaSessionId?: string },
 ): Promise<string> {
   return runLLM({ messages, overrideSettings, logInfo })
 }
@@ -167,7 +168,7 @@ export interface StreamToken {
 export async function* chatStream(
   messages: ChatMessage[],
   overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
-  logInfo?: { kbPath: string; role: LLMLogEntry['role'] },
+  logInfo?: { kbPath: string; role: LLMLogEntry['role']; qaSessionId?: string },
   signal?: AbortSignal,
 ): AsyncGenerator<StreamToken, void, undefined> {
   const settings = overrideSettings || getSettings().llm

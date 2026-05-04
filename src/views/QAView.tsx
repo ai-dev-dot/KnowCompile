@@ -39,6 +39,7 @@ export default function QAView({ kbPath }: Props) {
   const [streaming, setStreaming] = useState(false)
   const [streamingToken, setStreamingToken] = useState('')
   const [streamingThinking, setStreamingThinking] = useState('')
+  const [streamingError, setStreamingError] = useState<string | null>(null)
   const [gaps, setGaps] = useState<any[]>([])
   const [showGaps, setShowGaps] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
