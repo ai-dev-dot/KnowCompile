@@ -267,19 +267,20 @@ export class IndexDB {
     status: string,
     pageCount?: number
   ): void {
+    const now = status === 'compiled' ? "datetime('now')" : null
     const stmt =
       pageCount !== undefined
         ? this.db.prepare(
             `UPDATE sources
              SET status = ?,
                  page_count = ?,
-                 last_compiled_at = datetime('now')
+                 last_compiled_at = ${now}
              WHERE path = ?`
           )
         : this.db.prepare(
             `UPDATE sources
              SET status = ?,
-                 last_compiled_at = datetime('now')
+                 last_compiled_at = ${now}
              WHERE path = ?`
           )
 
@@ -331,6 +332,10 @@ export class IndexDB {
 
   clearLinks(): void {
     this.db.exec('DELETE FROM links')
+  }
+
+  clearSourceCompiledAt(): void {
+    this.db.exec("UPDATE sources SET last_compiled_at = NULL WHERE status = 'pending'")
   }
 
   deleteLinksForPage(pageId: number): void {

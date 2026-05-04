@@ -538,7 +538,7 @@ export function registerIPCHandlers() {
     // 2. Fall back to SQLite sources table
     const db = getIndexDB(kbPath)
     const source = db.getSourceByPath(`raw/${rawFileName}`)
-    if (source && (source.status === 'compiled' || source.last_compiled_at)) {
+    if (source && source.status === 'compiled') {
       return { compiled: true, compiledAt: source.last_compiled_at || undefined }
     }
     return { compiled: false }
@@ -914,7 +914,7 @@ export function registerIPCHandlers() {
       fs.writeFileSync(manifestPath, '[]', 'utf-8')
     }
 
-    // 4. Reset SQLite: source status → pending, delete all page records
+    // 4. Reset SQLite: source status → pending, clear last_compiled_at
     const db = getIndexDB(kbPath)
     const sources = db.listSources()
     for (const s of sources) {
@@ -922,6 +922,8 @@ export function registerIPCHandlers() {
         db.updateSourceStatus(s.path, 'pending')
       }
     }
+    // Belt-and-suspenders: clear last_compiled_at for any pending source
+    db.clearSourceCompiledAt()
     const pages = db.listPages()
     for (const p of pages) {
       db.deletePage(p.path)
