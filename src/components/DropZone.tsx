@@ -10,7 +10,7 @@ export default function DropZone({ onFilesDrop }: Props) {
 
   const extractPaths = useCallback((files: FileList) => {
     const paths = Array.from(files)
-      .map(f => (f as any).path)
+      .map(f => window.electronAPI.getFilePath(f))
       .filter(Boolean)
     if (paths.length > 0) onFilesDrop(paths)
   }, [onFilesDrop])

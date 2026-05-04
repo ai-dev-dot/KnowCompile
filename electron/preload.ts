@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 const ALLOWED_CHANNELS = new Set([
   // KB management
@@ -59,6 +59,7 @@ const api = {
     ipcRenderer.on(channel, subscription)
     return () => ipcRenderer.removeListener(channel, subscription)
   },
+  getFilePath: (file: File) => webUtils.getPathForFile(file),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

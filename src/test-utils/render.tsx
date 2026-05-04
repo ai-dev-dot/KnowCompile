@@ -16,6 +16,7 @@ beforeAll(() => {
     ;(window as any).electronAPI = {
       invoke: vi.fn().mockResolvedValue(undefined),
       on: vi.fn().mockReturnValue(() => {}),
+      getFilePath: vi.fn().mockImplementation((f: File) => (f as any).path || ''),
     }
   }
 })
