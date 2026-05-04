@@ -20,6 +20,8 @@ export function useIPC() {
       api.invoke('wiki:write', kbPath, subpath, content) as Promise<{ success: boolean }>,
     deleteWikiPage: (kbPath: string, subpath: string) =>
       api.invoke('wiki:delete', kbPath, subpath) as Promise<{ success: boolean }>,
+    resetAllWiki: (kbPath: string) =>
+      api.invoke('wiki:reset-all', kbPath) as Promise<{ success: boolean; deletedPages: number; resetSources: number }>,
     getBacklinks: (kbPath: string, pageName: string) =>
       api.invoke('wiki:backlinks', kbPath, pageName) as Promise<string[]>,
     extractLinks: (content: string) =>

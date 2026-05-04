@@ -55,6 +55,8 @@ export default function SettingsView({ kbPath }: Props) {
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildProgress, setRebuildProgress] = useState<RebuildProgress | null>(null)
   const [rebuildResult, setRebuildResult] = useState<string | null>(null)
+  const [resetting, setResetting] = useState(false)
+  const [resetResult, setResetResult] = useState<string | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
   const [conflicts, setConflicts] = useState<any[]>([])
   const [conflictResolving, setConflictResolving] = useState<Record<number, boolean>>({})
@@ -192,6 +194,22 @@ export default function SettingsView({ kbPath }: Props) {
     // Refresh index status
     const status = await ipc.getIndexStatus(kbPath)
     setIndexStatus(status)
+  }
+
+  const handleResetWiki = async () => {
+    if (!window.confirm('⚠️ 确定要删除所有 Wiki 页面并重置编译状态吗？\n\n这将：\n• 删除所有 wiki/*.md 页面\n• 清空编译日志\n• 重置所有 raw 文件为"待编译"\n• 清空向量索引\n\n此操作不可撤销。之后需要在"资料摄入"页面点击"全部编译"重新生成所有页面。')) return
+    setResetting(true)
+    setResetResult(null)
+    try {
+      const r = await ipc.resetAllWiki(kbPath)
+      setResetResult(`已删除 ${r.deletedPages} 个页面，${r.resetSources} 个源文件已重置为待编译。`)
+      const status = await ipc.getIndexStatus(kbPath)
+      setIndexStatus(status)
+    } catch (err: any) {
+      setResetResult(`操作失败：${err?.message || String(err)}`)
+    } finally {
+      setResetting(false)
+    }
   }
 
   const handleResolveConflict = async (conflictId: number) => {
@@ -703,6 +721,21 @@ export default function SettingsView({ kbPath }: Props) {
             {rebuildResult && (
               <div className="mt-3 p-3 rounded-lg bg-accent/10 text-accent text-sm">{rebuildResult}</div>
             )}
+
+            {/* Reset Wiki — destructive, with strong warning */}
+            <div className="mt-6 pt-4 border-t border-red-800/30">
+              <p className="text-xs text-red-400/70 mb-2">危险操作 — 删除所有 Wiki 页面和编译记录，不可撤销。之后需重新编译全部 raw 文件。</p>
+              <button
+                onClick={handleResetWiki}
+                disabled={resetting}
+                className="px-4 py-2 bg-red-900/30 text-red-400 border border-red-800/30 rounded-lg text-sm hover:bg-red-900/50 disabled:opacity-40 transition-colors"
+              >
+                {resetting ? '重置中...' : '重置所有 Wiki 页面'}
+              </button>
+              {resetResult && (
+                <div className="mt-3 p-3 rounded-lg bg-accent/10 text-accent text-sm">{resetResult}</div>
+              )}
+            </div>
           </section>
 
           {/* Conflict List */}

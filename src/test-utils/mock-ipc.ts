@@ -22,6 +22,7 @@ export function createMockIPC(overrides: MockIPCOverrides = {}) {
     readWikiPage: vi.fn().mockResolvedValue(o.wikiContent ?? '# 测试\n\n内容。'),
     writeWikiPage: vi.fn().mockResolvedValue({ success: true }),
     deleteWikiPage: vi.fn().mockResolvedValue({ success: true }),
+    resetAllWiki: vi.fn().mockResolvedValue({ success: true, deletedPages: 0, resetSources: 0 }),
     getBacklinks: vi.fn().mockResolvedValue(o.backlinks ?? []),
     extractLinks: vi.fn().mockResolvedValue(o.extractedLinks ?? []),
 

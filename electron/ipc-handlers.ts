@@ -886,6 +886,58 @@ export function registerIPCHandlers() {
     return { pages, sources, lastRebuild }
   })
 
+  // Reset all wiki pages — deletes pages, clears indexes, resets source status
+  ipcMain.handle('wiki:reset-all', async (_event, kbPath: string) => {
+    const fs = require('fs')
+    const path = require('path')
+
+    // 1. Delete all wiki/*.md files
+    const wikiDir = path.join(kbPath, 'wiki')
+    let pageCount = 0
+    if (fs.existsSync(wikiDir)) {
+      const files = fs.readdirSync(wikiDir).filter((f: string) => f.endsWith('.md'))
+      for (const f of files) {
+        fs.unlinkSync(path.join(wikiDir, f))
+        pageCount++
+      }
+    }
+
+    // 2. Clear compile-log.json
+    const logPath = path.join(kbPath, '.ai-notes', 'compile-log.json')
+    if (fs.existsSync(logPath)) {
+      fs.writeFileSync(logPath, '{}', 'utf-8')
+    }
+
+    // 3. Clear sample-pages.json
+    const manifestPath = path.join(kbPath, '.ai-notes', 'sample-pages.json')
+    if (fs.existsSync(manifestPath)) {
+      fs.writeFileSync(manifestPath, '[]', 'utf-8')
+    }
+
+    // 4. Reset SQLite: source status → pending, delete all page records
+    const db = getIndexDB(kbPath)
+    const sources = db.listSources()
+    for (const s of sources) {
+      if (s.status === 'compiled' || s.status === 'failed') {
+        db.updateSourceStatus(s.path, 'pending')
+      }
+    }
+    const pages = db.listPages()
+    for (const p of pages) {
+      db.deletePage(p.path)
+    }
+    // Clear links (cascaded by page deletes, but belt-and-suspenders)
+    db.clearLinks()
+
+    // 5. Clear LanceDB chunks — drop and recreate table
+    const vdb = await getVectorDB(kbPath)
+    if (vectorDB) {
+      try { await vdb.deleteAllChunks() } catch { /* ok if table already empty */ }
+    }
+
+    return { success: true, deletedPages: pageCount, resetSources: sources.length }
+  })
+
   // Diagnostics — aggregate system info from all storage layers
   ipcMain.handle('diagnostics:system-info', async (_event, kbPath: string) => {
     const db = getIndexDB(kbPath)

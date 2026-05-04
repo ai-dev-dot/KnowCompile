@@ -329,6 +329,10 @@ export class IndexDB {
     return this.db.prepare('SELECT * FROM links').all() as LinkRecord[]
   }
 
+  clearLinks(): void {
+    this.db.exec('DELETE FROM links')
+  }
+
   deleteLinksForPage(pageId: number): void {
     this.db
       .prepare('DELETE FROM links WHERE from_page_id = ? OR to_page_id = ?')

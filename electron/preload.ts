@@ -4,7 +4,7 @@ const ALLOWED_CHANNELS = new Set([
   // KB management
   'kb:init', 'kb:get-path', 'kb:set-path', 'kb:select', 'preload:embedding',
   // Wiki
-  'wiki:list', 'wiki:read', 'wiki:write', 'wiki:delete', 'wiki:backlinks', 'wiki:extract-links',
+  'wiki:list', 'wiki:read', 'wiki:write', 'wiki:delete', 'wiki:reset-all', 'wiki:backlinks', 'wiki:extract-links',
   // Assets
   'assets:read',
   // Raw

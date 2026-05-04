@@ -386,10 +386,10 @@ sources: [s.md]
 # S
 
 Hi.`
-    // This has 9 lines → < 10 → warning
-    expect(content.split('\n').length).toBeLessThan(10)
+    // This has 9 lines → < 15 → error
+    expect(content.split('\n').length).toBeLessThan(15)
     const report = validateCompileOutput(content, 'S')
-    expect(report.issues.some(i => i.rule === 'page-length' && i.message.includes('内容过少'))).toBe(true)
+    expect(report.issues.some(i => i.rule === 'page-length' && i.message.includes('碎片内容'))).toBe(true)
   })
 
   it('19. page too long triggers warning', () => {
