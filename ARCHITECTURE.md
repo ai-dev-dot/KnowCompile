@@ -16,7 +16,7 @@
 | 搜索 | FlexSearch |
 | 测试 | Vitest |
 
-**多模型协作**：编译和审查可使用不同 LLM。推荐编译用强模型，审查用廉价模型，在保证质量的同时控制成本。
+**多模型协作**：编译和审查可使用不同 LLM（设置中的 `review_llm` 字段，未配置时默认使用主 LLM）。推荐编译用强模型，审查用廉价模型，在保证质量的同时控制成本。内容审查可通过 `enable_content_review` 开关。
 
 **用户零额外安装**：所有组件打包进 Electron 安装包，包括 embedding 模型和数据库。
 
@@ -76,6 +76,7 @@ src/                # 渲染进程（React）
 tests/              # 后端测试
   helpers/
     llm-setup.ts    # LLM 测试凭证加载
+  compile-prompt-review.ts # 编译提示词质量评审脚本
 ```
 
 ---
@@ -114,7 +115,7 @@ raw/ 文件 → 分块 → bge-m3 向量化 → LanceDB 语义搜索已有页面
 1. **向量化** — 读取 raw/ 文件（PDF/MD/TXT），计算 SHA-256 哈希存入元数据，按 500 字符分块，bge-m3 嵌入为 1024 维向量存入 LanceDB（`type='source'`）
 2. **语义搜索** — 用样本块向量在 LanceDB 中检索相关已有页面，按页面聚合相似度，取 Top-N 候选
 3. **LLM 生成编译计划** — 发送原始摘要 + 候选页面 + schema 规则，生成 JSON CompilePlan（`updates` / `new_pages` / `conflicts` 三个数组）
-4. **LLM 生成页面** — 两步 CoT（分析概念关联 → 按模板输出），严格按 schema 风格生成，含 `[[双向链接]]`
+4. **LLM 生成页面** — 两步 CoT（分析概念关联 → 按模板输出），系统指令含 few-shot 格式示例和硬性规则（见 schema/ 文件），含 `[[双向链接]]`
 5. **内容审查** — 独立审查模型检查页面质量（事实准确性、完整性、链接合理性），不合格则回传修改建议给主编译模型重生成（1 次重试）
 6. **写入 + 索引** — 按 `# 标题` 分割多页面输出，规范化后写入 `wiki/*.md`，upsert SQLite pages 表，分块重新嵌入存入 LanceDB（`type='page'`）
 

@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.3.0 (2026-05-04)
+
+编译质量与资料摄入全面加固——提示词工程化、验证器修复、图片资产支持。
+
+### 编译系统
+
+- **Schema few-shot 示例** — `compile-rules.md` 新增完整格式示例（YAML frontmatter + 多节正文 + 链接章节），`links-rules.md` 新增 4 个正确/错误链接对比示例，`system.md` 重构角色定义与行为准则。所有内置 schema 版本升至 v4，已有知识库自动更新。
+- **验证器修复** — `validateMultiPage` 前端合并逻辑修复（frontmatter + 页面主体不再被拆散评分），YAML 多行列表解析器重写（`sources:\n  - file.md` 格式正确识别），`type` 字段从 3 个扩展到 7 个允许值。
+- **分析阶段注入格式** — `compileNewPages()` 的分析步骤现在也能看到输出格式规范，不只生成步骤。
+- **质量评审脚本** — `tests/compile-prompt-review.ts`：用真实 schema + 真实 raw 文件测试编译质量，输出逐页评分和问题汇总。当前 MiniMax-M2.7 平均 88/100。
+- **LLM 可观测性** — 每次 LLM 请求在控制台输出模型、prompt 大小、耗时。
+
+### 资料摄入
+
+- **图片资产自动导入** — 导入 Markdown 文件时自动发现并复制引用的本地图片（`![alt](img.png)`、`<img>` 标签等），支持 PNG/JPEG/GIF/WebP/SVG/BMP。
+- **Markdown 图片渲染** — Wiki 页面中的本地图片自动通过 `assets:read` 通道以 base64 渲染。
+- **image/webp 等图片格式**加入支持的文件类型列表。
+
+### 配置与 UI
+
+- **审查模型独立配置** — 设置中可指定 `review_llm`（模型+Key+Base URL），编译时用独立模型审查内容质量。新增 `enable_content_review` 开关。
+- **批量编译 UI** — RawFileList 新增"全部编译"按钮 + 进度条 + 逐文件结果汇总。
+- **wiki:delete** 现在同步清理 SQLite 和 LanceDB 向量。
+
+### 工程
+
+- `llm-service.ts`：`max_tokens` 4096 → 8192，QA 流式路径中 archive check 改为本地快速判断（消除 5-15s 后置等待）。
+- `compile-validator.ts`：`##` 小节要求从 2 个降为 1 个（warn），页长阈值放宽。
+- `compile-prompt-review.ts`：新增编译质量评审脚本。
+- 测试超时从 30s 调至 60s，LLM 集成测试默认读取 `%APPDATA%/knowcompile/settings.json`。
+
+---
+
 ## v0.2.3 (2026-05-04)
 
 资料摄入全面改造——不只是拖文件。
