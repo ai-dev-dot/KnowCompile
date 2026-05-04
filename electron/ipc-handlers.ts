@@ -227,7 +227,16 @@ export function registerIPCHandlers() {
 
       // Step 1 — SQLite
       send(1, 'SQLite 数据库', '正在打开索引数据库...')
-      getIndexDB(kbPath)
+      const db = getIndexDB(kbPath)
+
+      // Recover sources stuck in 'compiling' from a previous crash
+      const stuckSources = db.listSources().filter(s => s.status === 'compiling')
+      for (const s of stuckSources) {
+        db.updateSourceStatus(s.path, 'pending')
+      }
+      if (stuckSources.length > 0) {
+        console.log(`[preload] Recovered ${stuckSources.length} source(s) stuck in 'compiling'`)
+      }
 
       // Step 2 — LanceDB vector store
       send(2, '向量数据库', '正在初始化向量索引...')
