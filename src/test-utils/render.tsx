@@ -6,10 +6,9 @@
  *
  * Each test file must also start with: // @vitest-environment jsdom
  */
-import '@testing-library/jest-dom'
 import React from 'react'
-import { render, renderHook } from '@testing-library/react'
-import { beforeAll, vi } from 'vitest'
+import { render, renderHook, cleanup } from '@testing-library/react'
+import { beforeAll, afterEach, vi } from 'vitest'
 
 // Stub window.electronAPI before any component tries to read it
 beforeAll(() => {
@@ -19,6 +18,11 @@ beforeAll(() => {
       on: vi.fn().mockReturnValue(() => {}),
     }
   }
+})
+
+// Ensure DOM cleanup between tests (belt and suspenders with auto-cleanup)
+afterEach(() => {
+  cleanup()
 })
 
 export { render, renderHook, vi }
