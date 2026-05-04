@@ -607,7 +607,9 @@ export async function* semanticQAStream(
 ): AsyncGenerator<QAStreamEvent, void, undefined> {
   const t0 = performance.now()
   const qaSessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+  console.log(`[QA] 开始检索 | "${question.slice(0, 50)}" | ${new Date().toLocaleTimeString('zh-CN')}`)
   const ctx = await buildContext(question, kbPath, embedding, db, vdb)
+  console.log(`[QA] 检索完成 | ${ctx.sources.length} 个来源 | ${((performance.now() - t0) / 1000).toFixed(1)}s`)
 
   const m: QAStepMetrics = {
     ...ctx.metrics,
@@ -627,6 +629,7 @@ export async function* semanticQAStream(
     }
 
     const t5 = performance.now()
+    console.log(`[QA] 开始 LLM 生成...`)
     const systemPrompt = buildSystemPrompt(kbPath, ctx.contextText)
 
     const allMessages: ChatMessage[] = [
@@ -651,6 +654,7 @@ export async function* semanticQAStream(
 
     m.llmMs = Math.round(performance.now() - t5)
     m.totalMs = Math.round(performance.now() - t0)
+    console.log(`[QA] LLM 生成完成 | ${(m.llmMs / 1000).toFixed(1)}s | answer ${(accumulated.length / 1024).toFixed(0)}KB`)
 
     // Parse suggestions + detect gaps from the final accumulated response
     let cleanAnswer = accumulated
@@ -666,11 +670,10 @@ export async function* semanticQAStream(
       logGap(kbPath, question, qaSessionId)
     }
 
-    // LLM-based archive suggestion
-    let suggestArchive = false
-    try {
-      suggestArchive = await checkArchiveWorthy(question, cleanAnswer, ctx.sources, overrideSettings)
-    } catch { /* non-critical */ }
+    // Archive suggestion: use fast local heuristic for streaming (LLM check
+    // would add 5-15s of post-answer latency). The LLM path is kept for the
+    // non-streaming semanticQA() where total latency matters less.
+    const suggestArchive = isArchiveCandidate(cleanAnswer, ctx.sources)
 
     // Optional: content review
     const reviewEnabled = getSettingNum(db, 'qa_review_enabled', 0) === 1

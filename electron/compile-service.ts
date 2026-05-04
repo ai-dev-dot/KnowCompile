@@ -257,10 +257,11 @@ async function reviewContent(
 3. **逻辑连贯性**：章节结构是否合理？表述是否清晰无矛盾？
 4. **[[链接]]质量**：内部链接是否指向有实际关联的主题？是否存在乱挂链接的情况？
 5. **格式合规**：YAML frontmatter 是否正确？Markdown 语法是否正确？
+6. **Wiki 质量**：是否存在过度拆分的问题？每个页面是否是一个可独立阅读的、有足够深度的知识主题？如果一个页面只包含一两个段落或一个定义而没有实质展开，应指出应该合并到哪个上级页面。每个页面应至少有 2 个 ## 小节和 300 字以上正文。优先合并，不要碎片化。
 
 输出格式：如果质量合格，回复 "PASS"。如果存在问题，逐条列出具体问题和修复建议。` },
     { role: 'user' as const, content: [
-      `请审查以下编译任务生成的 Wiki 页面：`,
+      `请审查以下编译任务生成的 Wiki 页面。特别关注：生成的页面数量是否合理？是否过度拆分了原始资料？每个页面是否能作为独立的知识单元存在？`,
       '',
       `## 原始资料（摘要）`,
       rawSummary,
@@ -298,6 +299,8 @@ export async function incrementalCompile(
   overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
   onProgress?: (p: CompileProgress) => void,
 ): Promise<CompileResult> {
+  const compileStartTime = Date.now()
+  console.log(`[Compile] 开始编译 | ${path.basename(rawFilePath)} | ${new Date().toLocaleTimeString('zh-CN')}`)
   const emit = (step: number, label: string, detail?: string, percent?: number) => {
     onProgress?.({ step, label, detail, percent: percent ?? Math.round((step / 5) * 100) })
   }
@@ -479,8 +482,8 @@ export async function incrementalCompile(
     candidateSections,
     '',
     '## 任务',
-    '1. 判断哪些已有页面需要更新——列出页面名称、需要更新的章节、更新原因',
-    '2. 判断是否需要创建新页面——列出每个新页面的标题和创建原因',
+    '1. 判断哪些已有页面需要更新——优先将新内容合并更新到已有页面，列出页面名称、需更新的章节、更新原因',
+    '2. 判断是否需要创建新页面——只在主题差异大且新内容足够独立成文（> 2 个小节）时才新建。如果一个已有页面可以通过增加一个章节来容纳新内容，就不要新建。',
     '3. 检测新旧内容之间的矛盾——信息冲突、数值矛盾、观点矛盾等',
     '',
     '## 输出格式要求',
@@ -508,9 +511,12 @@ export async function incrementalCompile(
     { role: 'user' as const, content: verificationUserPrompt },
   ]
 
+  const planT0 = Date.now()
   let plan: CompilePlan
   try {
+    console.log(`[Compile] Step 3 — LLM 编译计划生成中...`)
     const planResponse = await chat(planMessages, overrideSettings, { kbPath, role: 'compile' })
+    console.log(`[Compile] Step 3 完成 (${((Date.now() - planT0) / 1000).toFixed(1)}s)`)
     const parsed = parsePlanJson(planResponse)
     if (parsed) {
       plan = parsed
@@ -541,7 +547,10 @@ export async function incrementalCompile(
   emit(4, 'LLM 生成 Wiki 页面', '正在撰写知识页面内容...', 65)
   await yield_()
 
+  const genT0 = Date.now()
+  console.log(`[Compile] Step 4 — LLM Wiki 页面生成中...`)
   let compileOutput = await compileNewPages(rawContent, rawFileName, existingTitles, kbPath, overrideSettings)
+  console.log(`[Compile] Step 4 完成 (${((Date.now() - genT0) / 1000).toFixed(1)}s)`)
 
   emit(4, 'Wiki 页面生成完成', undefined, 75)
   await yield_()
@@ -558,6 +567,8 @@ export async function incrementalCompile(
     emit(4, '内容审查', '正在由审查模型评估页面质量...', 78)
     await yield_()
 
+    const reviewT0 = Date.now()
+    console.log(`[Compile] Step 4.5 — 内容审查中...`)
     const reviewResult = await reviewContent(
       compileOutput,
       rawContent.slice(0, 4000),
@@ -566,6 +577,7 @@ export async function incrementalCompile(
       reviewSettings,
     )
 
+    console.log(`[Compile] Step 4.5 审查完成 (${((Date.now() - reviewT0) / 1000).toFixed(1)}s) — ${reviewResult.passed ? 'PASS' : '发现问题'}`)
     if (reviewResult.passed) {
       reviewFeedback = '审查通过'
       emit(4, '审查通过', undefined, 80)
@@ -575,6 +587,8 @@ export async function incrementalCompile(
       await yield_()
 
       try {
+        const retryT0 = Date.now()
+        console.log(`[Compile] Step 4.5 — 根据审查意见重新生成...`)
         const schemaContent = loadSchemaPrompt(kbPath)
         const retryPrompt = [
           { role: 'system' as const, content: schemaContent },
@@ -591,6 +605,7 @@ export async function incrementalCompile(
           ].join('\n') },
         ]
         const retryOutput = await chat(retryPrompt, overrideSettings || settings.llm, { kbPath, role: 'retry' })
+        console.log(`[Compile] Step 4.5 重新生成完成 (${((Date.now() - retryT0) / 1000).toFixed(1)}s)`)
         compileOutput = retryOutput
         reviewFeedback = reviewResult.feedback
         emit(4, '重新生成完成', undefined, 80)
@@ -731,6 +746,9 @@ export async function incrementalCompile(
   db.updateSourceStatus(sourcePath, 'compiled', generatedPages.length)
 
   emit(5, '编译完成', `${generatedPages.length} 个 Wiki 页面已生成`, 100)
+
+  const totalSec = ((Date.now() - compileStartTime) / 1000).toFixed(1)
+  console.log(`[Compile] 全部完成 | ${path.basename(rawFilePath)} | ${generatedPages.length} 页 | 总耗时 ${totalSec}s`)
 
   return {
     compileOutput,

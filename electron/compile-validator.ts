@@ -21,17 +21,45 @@ function parseFrontmatter(content: string): { raw: string; fields: Record<string
   if (!match) return null
   const raw = match[1]
   const fields: Record<string, any> = {}
+  let currentListKey = ''
+
   for (const line of raw.split('\n')) {
-    const kv = line.match(/^(\w+):\s*(.+)$/)
+    // YAML list continuation: "  - value"
+    if (currentListKey && /^\s{2}-\s/.test(line)) {
+      const item = line.replace(/^\s{2}-\s*/, '').trim()
+      if (Array.isArray(fields[currentListKey])) {
+        ;(fields[currentListKey] as string[]).push(item)
+      }
+      continue
+    }
+    currentListKey = ''
+
+    // Inline or multi-line: key: value  OR  key: (starts a list)
+    const kv = line.match(/^(\w+):\s*(.*)$/)
     if (kv) {
       const key = kv[1].trim()
-      let val: any = kv[2].trim()
+      let val: any = (kv[2] || '').trim()
       if (val.startsWith('[') && val.endsWith(']')) {
         val = val.slice(1, -1).split(',').map((s: string) => s.trim().replace(/['"]/g, ''))
+        fields[key] = val
+      } else if (val === '') {
+        // Empty value — this key starts a multi-line YAML list
+        currentListKey = key
+        fields[key] = []
+      } else {
+        fields[key] = val
       }
-      fields[key] = val
     }
   }
+
+  // Clean up: remove empty arrays from single-line keys that weren't actually lists
+  for (const key of Object.keys(fields)) {
+    if (Array.isArray(fields[key]) && (fields[key] as any[]).length === 0) {
+      // Empty array — treat as missing field
+      delete fields[key]
+    }
+  }
+
   return { raw, fields }
 }
 
@@ -63,7 +91,7 @@ export function validateCompileOutput(content: string, pageName: string): Valida
         issues.push({ severity: 'error', rule: 'frontmatter', message: `frontmatter 缺少必需字段: ${field}` })
       }
     }
-    if (fm.fields.type && !['concept', 'entity', 'synthesis'].includes(fm.fields.type)) {
+    if (fm.fields.type && !['concept', 'entity', 'synthesis', 'guide', 'tutorial', 'reference', 'troubleshooting'].includes(fm.fields.type)) {
       issues.push({ severity: 'warn', rule: 'frontmatter', message: `type 应为 concept/entity/synthesis，当前为: ${fm.fields.type}` })
     }
     if (fm.fields.sources && (!Array.isArray(fm.fields.sources) || fm.fields.sources.length === 0)) {
@@ -129,13 +157,24 @@ export function validateCompileOutput(content: string, pageName: string): Valida
     issues.push({ severity: 'error', rule: 'no-footnotes', message: '包含学术脚注格式（[^1] 或 ↩），应使用 "> 来源："' })
   }
 
-  // 9. Page length
+  // 9. Page length — enforce wiki quality standards
   const lines = content.split('\n').length
-  if (lines < 10) {
-    issues.push({ severity: 'warn', rule: 'page-length', message: `页面只有 ${lines} 行，内容过少` })
+  if (lines < 15) {
+    issues.push({ severity: 'error', rule: 'page-length', message: `页面只有 ${lines} 行，属于碎片内容，应合并到上级主题` })
+  } else if (lines < 20) {
+    issues.push({ severity: 'warn', rule: 'page-length', message: `页面只有 ${lines} 行，内容偏少，建议与相关主题合并` })
   }
   if (lines > 300) {
     issues.push({ severity: 'warn', rule: 'page-length', message: `页面有 ${lines} 行，建议不超过 200 行` })
+  }
+
+  // 9b. Section count — each page should have at least 1 ## section
+  const h2Matches = content.match(/^## /gm)
+  const h2Count = h2Matches ? h2Matches.length : 0
+  if (h2Count < 1) {
+    issues.push({ severity: 'error', rule: 'section-count', message: `页面缺少 ## 小节，没有实质性展开` })
+  } else if (h2Count < 2) {
+    issues.push({ severity: 'warn', rule: 'section-count', message: `页面只有 ${h2Count} 个 ## 小节，建议至少 2 个` })
   }
 
   // 10. No duplicate frontmatter in body (LLM sometimes leaks metadata to the end)
@@ -174,13 +213,32 @@ export function validateCompileOutput(content: string, pageName: string): Valida
 export function validateMultiPage(output: string): { reports: ValidationReport[]; overallScore: number } {
   const sections = output.split(/(?=^# )/m).filter(s => s.trim())
   const reports: ValidationReport[] = []
+  let pendingFrontmatter = ''
 
   for (const section of sections) {
     const titleMatch = section.match(/^# (.+)$/m)
-    const pageName = titleMatch ? titleMatch[1].trim() : 'unknown'
+    const pageName = titleMatch ? titleMatch[1].trim() : ''
+
+    // Orphan frontmatter / preamble — save it for the next real page
+    if (!pageName) {
+      if (/^---/.test(section.trim())) {
+        pendingFrontmatter = section.trim()
+      }
+      continue
+    }
+
     // Skip index page
-    if (pageName === 'Wiki 索引' || pageName.toLowerCase() === 'wiki index') continue
-    reports.push(validateCompileOutput(section, pageName))
+    if (pageName === 'Wiki 索引' || pageName.toLowerCase() === 'wiki index') {
+      pendingFrontmatter = ''
+      continue
+    }
+
+    const fullPage = pendingFrontmatter
+      ? pendingFrontmatter + '\n\n' + section.trim()
+      : section.trim()
+    pendingFrontmatter = ''
+
+    reports.push(validateCompileOutput(fullPage, pageName))
   }
 
   const overallScore = reports.length > 0

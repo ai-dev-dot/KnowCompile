@@ -63,13 +63,16 @@ interface RunLLMParams {
 async function runLLM(params: RunLLMParams): Promise<string> {
   const settings = params.overrideSettings || getSettings().llm
   const startTime = Date.now()
+  const promptLen = params.messages.reduce((sum, m) => sum + m.content.length, 0)
+  const role = params.logInfo?.role || 'chat'
+  console.log(`[LLM] 发起请求 | ${settings.provider}/${settings.model} | ${role} | prompt ${(promptLen / 1024).toFixed(0)}KB | ${new Date().toLocaleTimeString('zh-CN')}`)
   let response = ''
   let success = false
   let errorMsg: string | undefined
 
   try {
     if (settings.provider === 'anthropic') {
-      const client = new Anthropic({ apiKey: settings.apiKey })
+      const client = new Anthropic({ apiKey: settings.apiKey, timeout: 300_000 })
       const systemMsg = params.messages
         .filter(m => m.role === 'system')
         .map(m => m.content)
@@ -77,7 +80,7 @@ async function runLLM(params: RunLLMParams): Promise<string> {
       const otherMsgs = params.messages.filter(m => m.role !== 'system')
       const resp = await client.messages.create({
         model: settings.model,
-        max_tokens: 4096,
+        max_tokens: 8192,
         system: systemMsg || undefined,
         messages: otherMsgs.map(m => ({
           role: m.role as 'user' | 'assistant',
@@ -94,6 +97,8 @@ async function runLLM(params: RunLLMParams): Promise<string> {
       const client = new OpenAI({
         apiKey: settings.apiKey,
         baseURL: settings.baseURL || undefined,
+        timeout: 300_000,
+        maxRetries: 2,
       })
       const resp = await client.chat.completions.create({
         model: settings.model,
@@ -136,6 +141,13 @@ async function runLLM(params: RunLLMParams): Promise<string> {
     })
   }
 
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+  if (success) {
+    console.log(`[LLM] 请求完成 | ${settings.model} | ${elapsed}s | response ${(response.length / 1024).toFixed(0)}KB`)
+  } else {
+    console.log(`[LLM] 请求失败 | ${settings.model} | ${elapsed}s | ${errorMsg}`)
+  }
+
   if (!success) throw new Error(errorMsg || 'LLM call failed')
   return response
 }
@@ -173,6 +185,9 @@ export async function* chatStream(
 ): AsyncGenerator<StreamToken, void, undefined> {
   const settings = overrideSettings || getSettings().llm
   const startTime = Date.now()
+  const promptLen = messages.reduce((sum, m) => sum + m.content.length, 0)
+  const role = logInfo?.role || 'chat'
+  console.log(`[LLM] 发起流式请求 | ${settings.provider}/${settings.model} | ${role} | prompt ${(promptLen / 1024).toFixed(0)}KB | ${new Date().toLocaleTimeString('zh-CN')}`)
   let accumulated = ''
   let accumulatedRaw = '' // includes think tags for extraction
   let thinking = ''
@@ -181,7 +196,7 @@ export async function* chatStream(
 
   try {
     if (settings.provider === 'anthropic') {
-      const client = new Anthropic({ apiKey: settings.apiKey })
+      const client = new Anthropic({ apiKey: settings.apiKey, timeout: 300_000 })
       const systemMsg = messages
         .filter(m => m.role === 'system')
         .map(m => m.content)
@@ -189,7 +204,7 @@ export async function* chatStream(
       const otherMsgs = messages.filter(m => m.role !== 'system')
       const stream = await client.messages.create({
         model: settings.model,
-        max_tokens: 4096,
+        max_tokens: 8192,
         system: systemMsg || undefined,
         messages: otherMsgs.map(m => ({
           role: m.role as 'user' | 'assistant',
@@ -214,6 +229,8 @@ export async function* chatStream(
       const client = new OpenAI({
         apiKey: settings.apiKey,
         baseURL: settings.baseURL || undefined,
+        timeout: 300_000,
+        maxRetries: 2,
       })
       const stream = await client.chat.completions.create({
         model: settings.model,
@@ -270,6 +287,13 @@ export async function* chatStream(
     })
   }
 
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+  if (success) {
+    console.log(`[LLM] 流式请求完成 | ${settings.model} | ${elapsed}s | response ${(accumulated.length / 1024).toFixed(0)}KB`)
+  } else {
+    console.log(`[LLM] 流式请求失败 | ${settings.model} | ${elapsed}s | ${errorMsg}`)
+  }
+
   if (!success) throw new Error(errorMsg || 'LLM stream failed')
 }
 
@@ -285,7 +309,7 @@ export async function testConnection(settings: {
 }): Promise<{ success: boolean; message: string }> {
   try {
     if (settings.provider === 'anthropic') {
-      const client = new Anthropic({ apiKey: settings.apiKey })
+      const client = new Anthropic({ apiKey: settings.apiKey, timeout: 300_000 })
       const resp = await client.messages.create({
         model: settings.model,
         max_tokens: 50,
@@ -323,59 +347,43 @@ export async function compileNewPages(
   kbPath: string,
   overrideSettings?: { provider: string; apiKey: string; baseURL: string; model: string },
 ): Promise<string> {
+  // Schema includes format rules + few-shot example (see compile-rules.md)
   const fullSchema = loadSchemaPrompt(kbPath)
 
   const existingList = existingWikiTitles.length > 0
     ? `\n## 已有 Wiki 页面\n${existingWikiTitles.map(t => `- ${t}`).join('\n')}`
     : '\n## 已有 Wiki 页面\n（暂无，这是第一个编译任务）'
 
+  // Step 1 — Analysis (sees full schema including format example)
   const analysisPrompt: ChatMessage[] = [
     { role: 'system', content: fullSchema },
-    { role: 'user', content: `分析以下资料，识别核心概念、与已有页面的关联、页面拆分建议。只输出分析，不生成页面。\n\n## 资料：${rawFileName}\n\n${rawContent.slice(0, 8000)}\n${existingList}` },
+    { role: 'user', content: `分析以下资料。识别：1) 资料整体主题和结构 2) 哪些已有页面可以合并更新 3) 如果确实需要新建页面，主题差异是否足够大且各有独立成文的内容？优先合并，只在必要时新建。\n\n## 资料：${rawFileName}\n\n${rawContent.slice(0, 8000)}\n${existingList}` },
   ]
 
   const analysis = await chat(analysisPrompt, overrideSettings, { kbPath, role: 'compile' })
 
-  const fewShotExample = [
-    '',
-    '## 正确输出格式示例（Few-shot）',
-    '',
-    '以下是正确的输出格式，必须严格遵守：',
-    '',
-    '---',
-    'type: concept',
-    'tags: [AI, 机器学习]',
-    'sources: [example.md]',
-    'updated: 2026-05-01',
-    '---',
-    '',
-    '# 示例概念',
-    '',
-    '> 来源：example.md',
-    '',
-    '## 定义',
-    '',
-    '示例概念是指用于演示格式正确性的概念。',
-    '',
-    '## 核心内容',
-    '',
-    '这里是核心内容的段落。使用自然语言描述关键信息。',
-    '',
-    '## 相关主题',
-    '',
-    '- [[相关概念A]]',
-    '- [[相关概念B]]',
-    '',
-    '**重要：**',
-    '- 直接输出 Wiki 页面 Markdown，**禁止**用 JSON、代码块或其他格式封装',
-    '- YAML frontmatter **只出现在页面最开头一次**，页面正文末尾不要再重复 frontmatter',
-    '- 每个页面以 `---`（YAML frontmatter 开始标记）开头，然后是 frontmatter 字段，再是 `---`（结束标记），然后是正文',
-    '- 不要添加任何开场白、解释或结尾语，只输出页面本身',
-  ].join('\n')
-
+  // Step 2 — Generation (same schema, with concrete task instruction)
   const generationPrompt: ChatMessage[] = [
-    { role: 'system', content: fullSchema + fewShotExample },
-    { role: 'user', content: `根据分析结果生成 Wiki 页面。\n\n## 资料：${rawFileName}\n\n${rawContent.slice(0, 8000)}\n${existingList}\n\n## 分析\n${analysis}\n\n请直接输出 Wiki 页面 Markdown（参考 Few-shot 示例），不要用 JSON 或其他格式封装。` },
+    { role: 'system', content: fullSchema },
+    { role: 'user', content: [
+      '根据分析结果生成 Wiki 页面，严格遵守系统指令中的输出格式（Few-shot 示例）。',
+      '',
+      '要求：',
+      '- 优先合并相关内容，每个页面至少 2 个 ## 小节和 300 字正文',
+      '- 每个页面必须以 `---`（YAML frontmatter）开头',
+      '- 禁止输出开场白、解释或结尾语',
+      '',
+      `## 资料：${rawFileName}`,
+      '',
+      rawContent.slice(0, 8000),
+      '',
+      existingList,
+      '',
+      `## 分析结果`,
+      analysis,
+      '',
+      '请直接输出 Wiki 页面 Markdown。',
+    ].join('\n') },
   ]
 
   return chat(generationPrompt, overrideSettings, { kbPath, role: 'compile' })

@@ -70,7 +70,7 @@ describe('LLM Service', () => {
     expect(response).toBeTruthy()
     expect(response.length).toBeGreaterThan(0)
     expect(response.toLowerCase()).toContain('hello')
-  }, 30000)
+  }, 60000)
 
   it('2. chat with system message respects context', async () => {
     const response = await chat(
@@ -82,7 +82,7 @@ describe('LLM Service', () => {
     )
     expect(response).toBeTruthy()
     expect(response.length).toBeGreaterThan(0)
-  }, 30000)
+  }, 60000)
 
   it('3. chat response has thinking tags stripped', async () => {
     // Some models emit <think> tags; the chat wrapper should strip them
@@ -93,7 +93,7 @@ describe('LLM Service', () => {
     expect(response).toBeTruthy()
     // Should not contain raw think tags
     expect(/<\s*think\s*>/i.test(response)).toBe(false)
-  }, 30000)
+  }, 60000)
 
   it('4. chat handles multi-turn conversation', async () => {
     const response = await chat(
@@ -106,14 +106,14 @@ describe('LLM Service', () => {
     )
     expect(response).toBeTruthy()
     expect(response).toContain('小明')
-  }, 30000)
+  }, 60000)
 
   // -- testConnection --
   it('5. testConnection returns success with valid settings', async () => {
     const result = await testConnection(settings)
     expect(result.success).toBe(true)
     expect(result.message).toBeTruthy()
-  }, 30000)
+  }, 60000)
 
   it('6. testConnection returns failure with invalid API key', async () => {
     const result = await testConnection({
@@ -123,7 +123,7 @@ describe('LLM Service', () => {
     // Should fail gracefully, not throw
     expect(result.success).toBe(false)
     expect(result.message).toBeTruthy()
-  }, 30000)
+  }, 60000)
 
   // -- compileNewPages --
   it('7. compileNewPages generates wiki pages from raw content', async () => {
