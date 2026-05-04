@@ -35,6 +35,8 @@ import {
 import { listGaps, deleteGap, getGapStats } from './gap-store'
 import { generateDailyReport } from './report-generator'
 import pathModule from 'path'
+import crypto from 'crypto'
+import fs from 'fs'
 import { resolveSafePath } from './path-utils'
 import { loadSchemaPrompt } from './schema-loader'
 import { Worker } from 'worker_threads'
@@ -328,7 +330,27 @@ export function registerIPCHandlers() {
   })
 
   ipcMain.handle('raw:copy', (_event, kbPath: string, sourcePath: string) => {
-    return copyToRaw(kbPath, sourcePath)
+    const result = copyToRaw(kbPath, sourcePath)
+    if (result.success) {
+      // Sync to sources table so hash dedup covers newly imported files
+      try {
+        const destPath = pathModule.join(kbPath, 'raw', result.name!)
+        const stat = fs.statSync(destPath)
+        const fileBuffer = fs.readFileSync(destPath)
+        const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex')
+        const db = getIndexDB(kbPath)
+        db.addSource({
+          path: `raw/${result.name!}`,
+          filename: result.name!,
+          size: stat.size,
+          hash,
+          status: 'pending',
+        })
+      } catch {
+        // Source tracking is best-effort; file copy already succeeded
+      }
+    }
+    return result
   })
 
   ipcMain.handle('raw:read', (_event, kbPath: string, subpath: string) => {
@@ -336,7 +358,27 @@ export function registerIPCHandlers() {
   })
 
   ipcMain.handle('raw:validate', (_event, kbPath: string, sourcePath: string) => {
-    return validateRawFile(kbPath, sourcePath)
+    const result = validateRawFile(kbPath, sourcePath)
+    if (!result.valid) return result
+
+    // Content-hash dedup: compute SHA-256 and check against sources table
+    try {
+      const fileBuffer = fs.readFileSync(sourcePath)
+      const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex')
+      const db = getIndexDB(kbPath)
+      const existing = db.getSourceByHash(hash)
+      if (existing) {
+        return {
+          valid: false,
+          code: 'duplicate_content',
+          error: `文件内容与已导入的 "${existing.filename}" 相同`,
+        }
+      }
+    } catch {
+      // If hash check fails (e.g. file unreadable), let the copy step surface the error
+    }
+
+    return result
   })
 
   ipcMain.handle('raw:preview', (_event, kbPath: string, fileName: string) => {

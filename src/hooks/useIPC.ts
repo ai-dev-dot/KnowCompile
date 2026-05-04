@@ -34,7 +34,7 @@ export function useIPC() {
     readRawFile: (kbPath: string, subpath: string) =>
       api.invoke('raw:read', kbPath, subpath) as Promise<string>,
     validateRawFile: (kbPath: string, sourcePath: string) =>
-      api.invoke('raw:validate', kbPath, sourcePath) as Promise<{ valid: boolean; error?: string; code?: string }>,
+      api.invoke('raw:validate', kbPath, sourcePath) as Promise<{ valid: boolean; error?: string; code?: 'too_large' | 'unsupported_format' | 'duplicate' | 'duplicate_content' }>,
     previewRawContent: (kbPath: string, fileName: string) =>
       api.invoke('raw:preview', kbPath, fileName) as Promise<string>,
     extractPDFText: (filePath: string) =>

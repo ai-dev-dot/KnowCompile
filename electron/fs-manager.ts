@@ -61,7 +61,7 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
 export interface ValidateResult {
   valid: boolean
   error?: string
-  /** 'too_large' | 'unsupported_format' | 'duplicate' */
+  /** 'too_large' | 'unsupported_format' | 'duplicate' | 'duplicate_content' */
   code?: string
 }
 

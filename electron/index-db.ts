@@ -250,6 +250,12 @@ export class IndexDB {
       .get(sourcePath) as SourceRecord | undefined
   }
 
+  getSourceByHash(hash: string): SourceRecord | undefined {
+    return this.db
+      .prepare('SELECT * FROM sources WHERE hash = ?')
+      .get(hash) as SourceRecord | undefined
+  }
+
   listSources(): SourceRecord[] {
     return this.db
       .prepare('SELECT * FROM sources ORDER BY filename')

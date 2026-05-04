@@ -89,6 +89,9 @@ export default function RawFileList({ kbPath, files, statuses, onStatusChange }:
         const titleMatch = section.match(/^# (.+)$/m)
         if (titleMatch) {
           const pageName = titleMatch[1].trim()
+          // Skip empty sections — the LLM may emit orphan headings with no body
+          const bodyText = section.replace(/^# .+\n?/m, '').trim()
+          if (bodyText.length < 20) continue
           if (pageName === 'Wiki 索引' || pageName.toLowerCase() === 'wiki index') {
             await ipc.writeWikiPage(kbPath, 'wiki/index.md', section)
           } else {
@@ -165,6 +168,9 @@ export default function RawFileList({ kbPath, files, statuses, onStatusChange }:
       const titleMatch = section.match(/^# (.+)$/m)
       if (titleMatch) {
         const pageName = titleMatch[1].trim()
+        // Skip empty sections — the LLM may emit orphan headings with no body
+        const bodyText = section.replace(/^# .+\n?/m, '').trim()
+        if (bodyText.length < 20) continue
         if (pageName === 'Wiki 索引' || pageName.toLowerCase() === 'wiki index') {
           await ipc.writeWikiPage(kbPath, 'wiki/index.md', section)
         } else {

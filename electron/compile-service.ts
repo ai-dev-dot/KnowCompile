@@ -128,6 +128,10 @@ export function splitWikiPages(output: string): { title: string; content: string
       : section.trim()
     pendingFrontmatter = ''
 
+    // Skip empty pages — the LLM may emit orphan headings with no body
+    const bodyText = content.replace(/^# .+\n?/m, '').trim()
+    if (bodyText.length < 20) continue
+
     pages.push({ title, content })
   }
 
